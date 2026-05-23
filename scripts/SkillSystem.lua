@@ -153,6 +153,7 @@ function SkillSystem.startAiming(skillId, screenX, screenY)
         startY = screenY,
         currentX = screenX,
         currentY = screenY,
+        aimStartTime = os.clock(),
     }
     return true
 end

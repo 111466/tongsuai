@@ -645,6 +645,15 @@ function HandleMouseDown(eventType, eventData)
     local btn = eventData["Button"]:GetInt()
     if btn == MOUSEB_LEFT then
         if GS.gameState == "playing" then
+            if GS.skillAiming then
+                local elapsed = os.clock() - (GS.skillAiming.aimStartTime or 0)
+                if elapsed > 0.15 then
+                    SkillSystem.confirmAiming()
+                    GS.keyAimingSkill = nil
+                    return
+                end
+            end
+
             local mx = input:GetMousePosition().x
             local my = input:GetMousePosition().y
             if Renderer.isMinimapClicked(mx, my, GS.screenW, GS.screenH) then
@@ -665,9 +674,12 @@ function HandleMouseUp(eventType, eventData)
     local btn = eventData["Button"]:GetInt()
     if btn == MOUSEB_LEFT then
         if GS.skillAiming then
-            SkillSystem.confirmAiming()
-            GS.keyAimingSkill = nil
-            return
+            local elapsed = os.clock() - (GS.skillAiming.aimStartTime or 0)
+            if elapsed > 0.15 then
+                SkillSystem.confirmAiming()
+                GS.keyAimingSkill = nil
+                return
+            end
         end
         if GS.keyAimingSkill then
             SkillSystem.confirmAiming()
