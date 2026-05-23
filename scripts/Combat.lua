@@ -19,12 +19,7 @@ local Combat = {}
 local function calcUnitDamage(attackerType, defenderType, attackerLordId)
     local stats = CONFIG.UnitStats[attackerType]
     if not stats then return 0 end
-    local mul = 1.0
-    local mulTable = CONFIG.DamageMultiplier[attackerType]
-    if mulTable and mulTable[defenderType] then
-        mul = mulTable[defenderType]
-    end
-    local dmg = stats.atk * mul
+    local dmg = stats.atk
     if GS.bloodMoonActive then dmg = dmg * 1.5 end
 
     -- 天赋攻击加成

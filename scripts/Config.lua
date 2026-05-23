@@ -130,11 +130,7 @@ local CONFIG = {
         archer   = { hp = 40,  atk = 20, atkInterval = 1.5 },
         healer   = { hp = 30,  atk = 0,  atkInterval = 99  },  -- 不攻击，由 AI 主动治疗
     },
-    DamageMultiplier = {
-        soldier  = { soldier = 1.0, archer = 1.5, peasant = 2.0 },
-        archer   = { soldier = 0.7, archer = 1.0, peasant = 2.0 },
-        peasant  = { soldier = 0.5, archer = 0.5, peasant = 1.0 },
-    },
+    DamageMultiplierDisabled = true,
     LordModes = {
         charge = {  -- 冲锋阵（默认）：自由索敌，主动冲锋
             speedMul = 1.0,
