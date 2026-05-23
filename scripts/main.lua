@@ -619,20 +619,17 @@ function HandleUpdate(eventType, eventData)
         if aiming.pendingConfirm and aimElapsed >= 80 then
             SkillSystem.confirmAiming()
             GS.keyAimingSkill = nil
-        elseif aiming.fingerId == nil then
-            if input:GetMouseButtonDown(MOUSEB_LEFT) then
-                local mpos = input:GetMousePosition()
-                SkillSystem.updateAiming(mpos.x, mpos.y)
-            end
         else
+            local inputActive = false
+
             if numTouches > 0 then
                 local bestDist = math.huge
                 local bestTX, bestTY
                 for i = 0, numTouches - 1 do
                     local touch = input:GetTouch(i)
                     if touch then
-                        local dx = touch.position.x - aiming.startX
-                        local dy = touch.position.y - aiming.startY
+                        local dx = touch.position.x - aiming.lastTrackX
+                        local dy = touch.position.y - aiming.lastTrackY
                         local d = math.sqrt(dx * dx + dy * dy)
                         if d < bestDist then
                             bestDist = d
@@ -641,12 +638,22 @@ function HandleUpdate(eventType, eventData)
                         end
                     end
                 end
-                if bestTX and bestTY then
+                if bestDist < 200 and bestTX and bestTY then
                     SkillSystem.updateAiming(bestTX, bestTY)
+                    aiming.lastTrackX = bestTX
+                    aiming.lastTrackY = bestTY
+                    inputActive = true
                 end
-            elseif aimElapsed > 100 then
-                SkillSystem.confirmAiming()
-                GS.keyAimingSkill = nil
+            end
+
+            if not inputActive then
+                if SkillSystem.canConfirmAiming() then
+                    SkillSystem.confirmAiming()
+                    GS.keyAimingSkill = nil
+                else
+                    aiming.pendingConfirm = true
+                    GS.keyAimingSkill = nil
+                end
             end
         end
     end

@@ -155,6 +155,8 @@ function SkillSystem.startAiming(skillId, screenX, screenY, fingerId)
         currentY = screenY,
         aimStartTime = os.clock(),
         fingerId = fingerId,
+        lastTrackX = screenX,
+        lastTrackY = screenY,
     }
     return true
 end
