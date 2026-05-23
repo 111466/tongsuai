@@ -61,12 +61,12 @@ local CONFIG = {
     HealerInterval     = 2.0,  -- 治疗间隔（秒）
 
     -- 据点系统
-    StrongholdHP = 300,             -- 据点生命值
+    StrongholdHP = 500,             -- 据点生命值
     StrongholdTowerRange = 150,     -- 防御塔射程（像素）
     StrongholdTowerDamage = 15,     -- 防御塔伤害
     StrongholdTowerInterval = 1.5,  -- 防御塔攻击间隔（秒）
 
-    RespawnTime = 3.0,              -- 复活倒计时（秒）
+    RespawnTime = 5.0,              -- 复活倒计时（秒）
     RespawnHpRatio = 0.5,           -- 复活血量比例
 
 

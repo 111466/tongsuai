@@ -94,7 +94,7 @@ local function initGame(mode)
     for i = 1, CONFIG.AILordCount do
         local sp = spawnPositions[i]
         local aiLord = Entities.createLord(sp[1], sp[2], i + 1, false)
-        aiLord.wood = 30
+        aiLord.wood = 50
         for j = 1, CONFIG.InitPeasants do
             Entities.createFollower(aiLord, "peasant")
         end

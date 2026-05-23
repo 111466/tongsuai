@@ -18,14 +18,13 @@ function Stronghold.onLordDeath(lord)
     lord.deathY = lord.y
 
     -- 扣据点HP
-    local deathCost = 100
-    if GS.bloodMoonActive then deathCost = 150 end
+    local deathCost = 70
+    if GS.bloodMoonActive then deathCost = 105 end
     lord.strongholdHP = lord.strongholdHP - deathCost
 
     if lord.strongholdHP <= 0 then
         lord.strongholdHP = 0
         lord.alive = false
-        -- 惩罚：损失50%资源 & 掉落战利品
         local lootWood = math.floor(lord.wood * 0.5)
         local lootStone = math.floor(lord.stone * 0.5)
         lord.wood = lord.wood - lootWood
@@ -40,18 +39,22 @@ function Stronghold.onLordDeath(lord)
             Entities.createLootBox(lord.x, lord.y, lootWood, lootStone)
         end
         Entities.spawnParticle(lord.x, lord.y, 255, 50, 50, 20)
-        return false  -- 永久淘汰
+        return false
     end
 
-    -- 据点HP > 0，进入复活流程
     lord.alive = false
-    -- 惩罚
-    local lootWood = math.floor(lord.wood * 0.5)
-    local lootStone = math.floor(lord.stone * 0.5)
+    local lootWood = math.floor(lord.wood * 0.3)
+    local lootStone = math.floor(lord.stone * 0.3)
     lord.wood = lord.wood - lootWood
     lord.stone = lord.stone - lootStone
+    local followers = {}
     for _, f in ipairs(GS.followers) do
         if f.lordId == lord.id and f.alive then
+            table.insert(followers, f)
+        end
+    end
+    for i, f in ipairs(followers) do
+        if i % 2 == 0 then
             f.alive = false
             Entities.spawnParticle(f.x, f.y, 150, 150, 150, 2)
         end
@@ -75,14 +78,22 @@ function Stronghold.respawnLord(lordId)
 
     foundLord.alive = true
     foundLord.hp = math.floor(foundLord.maxHp * CONFIG.RespawnHpRatio)
-    -- 随机位置复活
     foundLord.x = math.random(200, CONFIG.MapWidth - 200)
     foundLord.y = math.random(200, CONFIG.MapHeight - 200)
-    foundLord.invincibleTimer = 3.0
-    -- 初始随从：2农民 + 1士兵
-    Entities.createFollower(foundLord, "peasant")
-    Entities.createFollower(foundLord, "peasant")
-    Entities.createFollower(foundLord, "soldier")
+    foundLord.invincibleTimer = 2.0
+    local hasFollowers = false
+    for _, f in ipairs(GS.followers) do
+        if f.lordId == foundLord.id and f.alive then
+            hasFollowers = true
+            f.x = foundLord.x + math.random(-40, 40)
+            f.y = foundLord.y + math.random(-40, 40)
+            f.state = "following"
+        end
+    end
+    if not hasFollowers then
+        Entities.createFollower(foundLord, "peasant")
+        Entities.createFollower(foundLord, "soldier")
+    end
     Entities.spawnParticle(foundLord.x, foundLord.y, 100, 200, 255, 15)
     print("[RESPAWN] Faction " .. foundLord.faction .. " lord respawned at random position!")
 end
