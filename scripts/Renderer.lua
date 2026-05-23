@@ -574,7 +574,9 @@ function M.drawLord(l)
         if GS.fogActive then auraR = auraR * 0.7 end
         local asX, asY = Utils.worldToScreen(l.x, l.y)
         local aR, aG, aB = fc[1], fc[2], fc[3]
-        local auraAlpha = 15
+        local luminance = (aR * 0.299 + aG * 0.587 + aB * 0.114) / 255
+        local auraAlpha = math.floor(15 + 25 * luminance)
+        local strokeAlpha = math.floor(40 + 60 * luminance)
 
         if GS.fogActive then
             aR = math.floor(aR * 0.6 + 128 * 0.4)
@@ -588,8 +590,8 @@ function M.drawLord(l)
         nvgFill(ctx)
         nvgBeginPath(ctx)
         nvgCircle(ctx, asX, asY, auraR)
-        nvgStrokeColor(ctx, nvgRGBA(aR, aG, aB, 40))
-        nvgStrokeWidth(ctx, 1)
+        nvgStrokeColor(ctx, nvgRGBA(aR, aG, aB, strokeAlpha))
+        nvgStrokeWidth(ctx, 1.5)
         nvgStroke(ctx)
     end
 
