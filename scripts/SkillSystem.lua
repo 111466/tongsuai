@@ -194,28 +194,45 @@ function SkillSystem.confirmAiming()
     local dragY = aiming.currentY - aiming.startY
     local dragDist = math.sqrt(dragX * dragX + dragY * dragY)
     local DEADZONE = 15  -- 小于15px的拖拽视为无方向
+    local QUICK_TAP_THRESHOLD_MS = 200  -- 200ms内的点击视为快速点击
+    local MAX_DRAG_DIST_PX = 100  -- 屏幕上最大拖动距离，超过此距离为最大释放距离
 
     local dirX, dirY  -- 屏幕空间方向（已归一化）
-    if dragDist >= DEADZONE then
-        dirX = dragX / dragDist
-        dirY = dragY / dragDist
-    else
-        -- 死区内：使用lord当前朝向映射到屏幕方向
+    local targetWX, targetWY  -- 世界空间目标位置
+
+    local aimTimeElapsed = (os.clock() - aiming.aimStartTime) * 1000  -- 毫秒
+
+    -- 判断是快速点击还是有拖动
+    if aimTimeElapsed < QUICK_TAP_THRESHOLD_MS and dragDist < DEADZONE * 2 then
+        -- 快速点击：朝角色朝向释放
         dirX = math.cos(lord.angle)
         dirY = math.sin(lord.angle)
+        targetWX = lord.x + dirX * MAX_RANGE
+        targetWY = lord.y + dirY * MAX_RANGE
+    else
+        -- 有拖动：根据拖动距离和方向释放
+        if dragDist >= DEADZONE then
+            dirX = dragX / dragDist
+            dirY = dragY / dragDist
+            -- 拖动距离映射到世界距离：0 到 MAX_RANGE
+            local releaseDist = math.min(dragDist / MAX_DRAG_DIST_PX, 1.0) * MAX_RANGE
+            targetWX = lord.x + dirX * releaseDist
+            targetWY = lord.y + dirY * releaseDist
+        else
+            -- 有长按但拖动不够：朝角色朝向释放
+            dirX = math.cos(lord.angle)
+            dirY = math.sin(lord.angle)
+            targetWX = lord.x + dirX * MAX_RANGE
+            targetWY = lord.y + dirY * MAX_RANGE
+        end
     end
 
     if skillId == "dash" then
         SkillSystem._activateDash(cfg, dirX, dirY)
     elseif skillId == "bounty" then
-        -- 屏幕拖拽方向对应世界方向（俯视图屏幕X=世界X，屏幕Y=世界Y）
-        local tx = lord.x + dirX * MAX_RANGE
-        local ty = lord.y + dirY * MAX_RANGE
-        SkillSystem._activateBounty(cfg, tx, ty)
+        SkillSystem._activateBounty(cfg, targetWX, targetWY)
     elseif skillId == "arrowRain" then
-        local tx = lord.x + dirX * MAX_RANGE
-        local ty = lord.y + dirY * MAX_RANGE
-        SkillSystem._activateArrowRain(cfg, tx, ty)
+        SkillSystem._activateArrowRain(cfg, targetWX, targetWY)
     elseif skillId == "shieldWall" then
         local aimAngle = math.atan2(dirY, dirX)
         SkillSystem._activateShieldWall(cfg, aimAngle)
@@ -228,6 +245,32 @@ end
 
 function SkillSystem.getAimingState()
     return GS.skillAiming
+end
+
+function SkillSystem.getAimingTargetPosition()
+    local aiming = GS.skillAiming
+    if not aiming then return nil end
+
+    local lord = getPlayerLord()
+    if not lord then return nil end
+
+    local dragX = aiming.currentX - aiming.startX
+    local dragY = aiming.currentY - aiming.startY
+    local dragDist = math.sqrt(dragX * dragX + dragY * dragY)
+    local DEADZONE = 15
+    local MAX_DRAG_DIST_PX = 100
+
+    local dirX, dirY
+    if dragDist >= DEADZONE then
+        dirX = dragX / dragDist
+        dirY = dragY / dragDist
+        local releaseDist = math.min(dragDist / MAX_DRAG_DIST_PX, 1.0) * MAX_RANGE
+        return lord.x + dirX * releaseDist, lord.y + dirY * releaseDist, dirX, dirY
+    else
+        dirX = math.cos(lord.angle)
+        dirY = math.sin(lord.angle)
+        return lord.x + dirX * MAX_RANGE, lord.y + dirY * MAX_RANGE, dirX, dirY
+    end
 end
 
 function SkillSystem.activateWithTarget(skillId, targetWX, targetWY)
