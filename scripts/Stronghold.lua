@@ -75,17 +75,16 @@ function Stronghold.respawnLord(lordId)
 
     foundLord.alive = true
     foundLord.hp = math.floor(foundLord.maxHp * CONFIG.RespawnHpRatio)
-    -- 在死亡位置复活（不是据点位置）
-    foundLord.x = foundLord.deathX or foundLord.x
-    foundLord.y = foundLord.deathY or foundLord.y
+    -- 随机位置复活
+    foundLord.x = math.random(200, CONFIG.MapWidth - 200)
+    foundLord.y = math.random(200, CONFIG.MapHeight - 200)
     foundLord.invincibleTimer = 3.0
-    foundLord.lordMode = "charge"  -- 复活后默认进攻模式
     -- 初始随从：2农民 + 1士兵
     Entities.createFollower(foundLord, "peasant")
     Entities.createFollower(foundLord, "peasant")
     Entities.createFollower(foundLord, "soldier")
     Entities.spawnParticle(foundLord.x, foundLord.y, 100, 200, 255, 15)
-    print("[RESPAWN] Faction " .. foundLord.faction .. " lord respawned at death position!")
+    print("[RESPAWN] Faction " .. foundLord.faction .. " lord respawned at random position!")
 end
 
 function Stronghold.updateStrongholds(dt)
@@ -93,15 +92,6 @@ function Stronghold.updateStrongholds(dt)
     for _, lord in ipairs(GS.lords) do
         if not lord.alive then goto continueLord end
 
-        -- 更新模式切换提示文字
-        if lord.modeSwitchText then
-            lord.modeSwitchText.timer = lord.modeSwitchText.timer - dt
-            if lord.modeSwitchText.timer <= 0 then
-                lord.modeSwitchText = nil
-            end
-        end
-
-        -- ===== 防御塔攻击逻辑（跟随领主，不再崩溃） =====
         if lord.towerActive then
             lord.towerTimer = lord.towerTimer + dt
             if lord.towerTimer >= CONFIG.StrongholdTowerInterval then

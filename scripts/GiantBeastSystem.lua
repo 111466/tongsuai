@@ -7,7 +7,6 @@ local ConfigModule = require("Config")
 local CONFIG = ConfigModule.CONFIG
 local Utils = require("Utils")
 local Entities = require("Entities")
-local SquadSystem = require("SquadSystem")
 local CodexState = require("CodexState")
 
 local BS = {}
@@ -138,14 +137,10 @@ function BS._attack(beast, lord, nearbyFollowers)
     -- 记录图鉴遭遇
     CodexState.recordEnemyEncounter("map_giant_beast")
 
-    -- 触发小队分散
-    SquadSystem.triggerScatter(lord.id, beast.x, beast.y)
-
-    -- 对没有小队的随从也施加分散效果（通过设置 squadStateCache）
+    -- 触发随从分散
     for _, f in ipairs(nearbyFollowers) do
-        if f.alive and not SquadSystem.isInSquad(f.id) then
-            -- 非小队成员也被吓散
-            f.squadStateCache = "scattered"
+        if f.alive then
+            f.beastScaredTimer = CONFIG.ScatterDuration
             local dx, dy = Utils.normalize(f.x - beast.x, f.y - beast.y)
             local randAngle = (math.random() - 0.5) * math.pi * 0.6
             local cos_a, sin_a = math.cos(randAngle), math.sin(randAngle)

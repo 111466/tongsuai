@@ -10,7 +10,6 @@ local FACTION_COLORS = ConfigModule.FACTION_COLORS
 local TS = require("TalentSystem")
 local Entities = require("Entities")
 local SkillSystem = require("SkillSystem")
-local SquadSystem = require("SquadSystem")
 local SettingsUI = require("SettingsUI")
 
 local M = {}

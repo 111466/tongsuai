@@ -5,7 +5,6 @@ local Utils = require("Utils")
 local Entities = require("Entities")
 local TS = require("TalentSystem")
 local SkillSystem = require("SkillSystem")
-local SquadSystem = require("SquadSystem")
 
 local dist = Utils.dist
 local normalize = Utils.normalize
@@ -50,8 +49,7 @@ end
 --- 领主级别的资源分配：扫描光环内资源，随机分配给空闲平民
 --- 每帧由 updateAll 对每个领主调用一次
 local function assignResourcesForLord(lord)
-    local mode = GS.tcGetMode(lord.id)
-    local peasantSearchRadius = CONFIG.AuraRadius * GS.tcGetSearchRadiusMul(lord.id)
+    local peasantSearchRadius = CONFIG.AuraRadius
     if GS.fogActive then peasantSearchRadius = peasantSearchRadius * 0.7 end
 
     -- 收集光环内未被占用的资源
@@ -120,8 +118,6 @@ function FollowerAI.updateFollowerAI(f, dt)
     -- ===== 光环约束：超出领主光环半径时强制跟随 =====
     if dToLord > CONFIG.AuraRadius
         and f.state ~= "following"
-        and f.state ~= "scattered"
-        and f.state ~= "fleeing"
         and f.state ~= "lured" then
         -- 如果在采集，释放资源锁定
         if f.state == "working" then
@@ -139,38 +135,6 @@ function FollowerAI.updateFollowerAI(f, dt)
             f.lureChestId = chest.id
             f.lureStunTimer = 0
         end
-    end
-
-    -- ===== 突击/逃散/逃跑状态：优先处理，跳过所有常规逻辑 =====
-    local sqCache = f.squadStateCache
-    if sqCache == "scattered" or sqCache == "fleeing" then
-        -- 朝逃跑目标移动
-        if f.fleeTargetX and f.fleeTargetY and (f.fleeTimer or 0) > 0 then
-            local dFlee = dist(f.x, f.y, f.fleeTargetX, f.fleeTargetY)
-            if dFlee > 10 then
-                local dx, dy = normalize(f.fleeTargetX - f.x, f.fleeTargetY - f.y)
-                local fleeSpd = CONFIG.FollowerSpeed * CONFIG.ScatterSpeed * globalSpd
-                f.x = f.x + dx * fleeSpd * dt
-                f.y = f.y + dy * fleeSpd * dt
-                f.angle = math.atan2(dy, dx)
-            end
-            f.fleeTimer = f.fleeTimer - dt
-            if f.fleeTimer <= 0 then
-                f.squadStateCache = nil
-                f.fleeTargetX = nil
-                f.fleeTargetY = nil
-                f.fleeTimer = nil
-                f.state = "following"
-            end
-        else
-            -- 没有逃跑目标或计时器到期，立即恢复
-            f.squadStateCache = nil
-            f.state = "following"
-        end
-        -- 边界限制
-        f.x = clamp(f.x, 10, CONFIG.MapWidth - 10)
-        f.y = clamp(f.y, 10, CONFIG.MapHeight - 10)
-        return
     end
 
     if f.state == "lured" then
@@ -203,26 +167,6 @@ function FollowerAI.updateFollowerAI(f, dt)
             end
         end
     elseif f.state == "following" then
-        -- 小队成员跟随副将而非领主
-        if SquadSystem.isInSquad(f.id) and f.squadRole == "member" then
-            local tx, ty = SquadSystem.getSquadTarget(f.id)
-            if tx and ty then
-                local d = dist(f.x, f.y, tx, ty)
-                if d > 25 then
-                    local dx, dy = normalize(tx - f.x, ty - f.y)
-                    local spd = CONFIG.FollowerSpeed * GS.tcGetUnitSpeedMul(f.lordId) * getGlobalSpeedMul()
-                    -- 突击状态：3倍速度加成
-                    if sqCache == "charging" then
-                        spd = spd * CONFIG.ChargeSpeedMul
-                    end
-                    f.x = f.x + dx * spd * dt
-                    f.y = f.y + dy * spd * dt
-                    f.angle = math.atan2(dy, dx)
-                end
-                return  -- 小队成员不执行主队跟随逻辑
-            end
-        end
-
         -- 环形编队逻辑
         local myIndex = 0
         local totalFollowing = 0
@@ -253,19 +197,15 @@ function FollowerAI.updateFollowerAI(f, dt)
             end
         end
 
-        -- 朝编队目标点移动（受战术指令移速倍率影响）
-        local unitSpeedMul = GS.tcGetUnitSpeedMul(lord.id)
-        -- 冲锋随从加速buff
+        -- 朝编队目标点移动
         local dashSpeedMul = 1.0
         if lord.isPlayer then
             dashSpeedMul = SkillSystem.getDashSpeedMul()
         end
-        -- 冲锋阵爆发移速
-        local burstMul = GS.tcGetChargeBurstMul(lord.id)
         local gDist = dist(f.x, f.y, goalX, goalY)
         if gDist > 3 or dToLord > formationRadius + 60 then
             local dx, dy = normalize(goalX - f.x + sepX, goalY - f.y + sepY)
-            local speed = CONFIG.FollowerSpeed * unitSpeedMul * dashSpeedMul * burstMul * globalSpd
+            local speed = CONFIG.FollowerSpeed * dashSpeedMul * globalSpd
             if dToLord > 200 then speed = speed * 1.8 end -- 掉队加速追赶
             if gDist < 20 then speed = speed * (gDist / 20) end -- 接近目标减速
             f.x = f.x + dx * speed * dt
@@ -298,7 +238,7 @@ function FollowerAI.updateFollowerAI(f, dt)
                 f.targetY = focusTarget.y
             else
                 -- 常规目标搜索
-                local searchRadius = CONFIG.AuraRadius * GS.tcGetSearchRadiusMul(lord.id)
+                local searchRadius = CONFIG.AuraRadius
                 if GS.fogActive then searchRadius = searchRadius * 0.7 end
                 local bestTarget = nil
                 local bestTargetDist = searchRadius
@@ -342,18 +282,6 @@ function FollowerAI.updateFollowerAI(f, dt)
                                 bestTarget = {type = "boss", id = b.id, x = b.x, y = b.y}
                             end
                         end
-                    end
-                end
-
-                -- 铁桶阵：不主动追击领域外敌人
-                local combatMode = GS.tcGetMode(lord.id)
-                if combatMode == "turtle" and bestTarget then
-                    -- 仅拦截已进入领域的敌人（不追出去）
-                    local enemyDist = dist(lord.x, lord.y, bestTarget.x, bestTarget.y)
-                    local turtleAura = CONFIG.AuraRadius * CONFIG.LordModes.turtle.auraMul
-                    if GS.fogActive then turtleAura = turtleAura * 0.7 end
-                    if enemyDist > turtleAura then
-                        bestTarget = nil  -- 目标在领域外，不追
                     end
                 end
 
@@ -447,7 +375,7 @@ function FollowerAI.updateFollowerAI(f, dt)
         f.targetY = ty
 
         local dToTarget = dist(f.x, f.y, tx, ty)
-        local atkSpeedMul = GS.tcGetUnitSpeedMul(lord.id)
+        local atkSpeedMul = 1.0
 
         -- === 拒马减速：敌方单位在拒马范围内移速减半 ===
         local barricadeSlow = SkillSystem.getBarricadeSlowFactor(f.x, f.y, f.factionId)

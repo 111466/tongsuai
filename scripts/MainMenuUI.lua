@@ -137,13 +137,38 @@ end
 ------------------------------------------------------------
 local MODE_ICONS = {
     skirmish = { icon = "X", color = {255, 90, 70} },
-    campaign = { icon = "C", color = {70, 200, 120} },
-    endless  = { icon = "E", color = {200, 140, 255} },
+    campaign = { icon = "C", color = {120, 120, 120} },
+    endless  = { icon = "E", color = {120, 120, 120} },
 }
 
 ------------------------------------------------------------
 -- 构建 UI
 ------------------------------------------------------------
+
+local toastPanel = nil
+local toastLabel = nil
+
+local function showToast(message)
+    if not toastLabel or not toastPanel then return end
+    toastLabel:SetText(message)
+    toastPanel:SetVisible(true)
+    toastPanel:SetStyle({ opacity = 1 })
+    toastPanel:Animate({
+        keyframes = {
+            [0] = { opacity = 1 },
+            [1] = { opacity = 0 },
+        },
+        duration = 1.0,
+        delay = 0.8,
+        easing = "easeOut",
+        onComplete = function()
+            if toastPanel then
+                toastPanel:SetVisible(false)
+                toastPanel:SetStyle({ opacity = 1 })
+            end
+        end,
+    })
+end
 
 function M.show()
     if menuRoot then return end
@@ -294,8 +319,8 @@ function M.show()
     local modeTabs = UI.Tabs {
         tabs = {
             { id = "skirmish", label = "遭遇战" },
-            { id = "campaign", label = "战役" },
-            { id = "endless",  label = "无尽" },
+            { id = "campaign", label = "战役（未解锁）", disabled = true },
+            { id = "endless",  label = "无尽（未解锁）", disabled = true },
         },
         activeTab = GS.gameMode,
         variant = "pills",
@@ -305,6 +330,12 @@ function M.show()
         tabGap = 6,
         alignSelf = "center",
         onChange = function(self, tabId, tab)
+            if tabId == "campaign" or tabId == "endless" then
+                GS.gameMode = "skirmish"
+                updateModeInfoCard()
+                showToast("即将开放")
+                return
+            end
             GS.gameMode = tabId
             updateModeInfoCard()
         end,
@@ -378,6 +409,35 @@ function M.show()
     }
 
     -- 组装根节点
+    toastPanel = UI.Panel {
+        id = "toastPanel",
+        position = "absolute",
+        top = "40%",
+        left = 0, right = 0,
+        justifyContent = "center",
+        alignItems = "center",
+        pointerEvents = "none",
+        visible = false,
+        children = {
+            UI.Panel {
+                backgroundColor = {0, 0, 0, 200},
+                borderRadius = 10,
+                paddingLeft = 24, paddingRight = 24,
+                paddingTop = 12, paddingBottom = 12,
+                children = {
+                    toastLabel = UI.Label {
+                        id = "toastLabel",
+                        text = "",
+                        fontSize = 16,
+                        fontWeight = "bold",
+                        fontColor = {255, 220, 100, 255},
+                        textAlign = "center",
+                    },
+                },
+            },
+        },
+    }
+
     menuRoot = UI.Panel {
         width = "100%", height = "100%",
         pointerEvents = "box-none",
@@ -386,6 +446,7 @@ function M.show()
             titlePanel,
             sideBar,
             bottomArea,
+            toastPanel,
         }
     }
 
@@ -430,7 +491,8 @@ function M.hide()
         modeInfoLabel1 = nil
         modeInfoLabel2 = nil
         modeInfoLabel3 = nil
-        formationLabel = nil
+        toastPanel = nil
+        toastLabel = nil
     end
     print("[MainMenuUI] Hidden")
 end
@@ -440,22 +502,14 @@ end
 ------------------------------------------------------------
 
 function M.onStartGame()
+    if GS.gameMode == "campaign" or GS.gameMode == "endless" then
+        showToast("即将开放")
+        return
+    end
     local GameUI = require("GameUI")
     if GS.gameMode == "skirmish" then
         M.hide()
         if M.initGameFn then M.initGameFn("skirmish") end
-        GameUI.CreateGameUI()
-    elseif GS.gameMode == "campaign" then
-        M.hide()
-        GS.gameState = "campaign_select"
-        local CampaignSelectUI = require("CampaignSelectUI")
-        CampaignSelectUI.show(function(levelId)
-            if M.initGameFn then M.initGameFn("campaign") end
-            GameUI.CreateGameUI()
-        end)
-    elseif GS.gameMode == "endless" then
-        M.hide()
-        if M.initGameFn then M.initGameFn("endless") end
         GameUI.CreateGameUI()
     end
 end

@@ -40,12 +40,8 @@ function Entities.createLord(x, y, faction, isPlayer)
         strongholdMaxHP = CONFIG.StrongholdHP,
         towerActive = true,
         towerTimer = 0,
-        lordMode = "charge",    -- "charge" | "turtle"
-        auraDmgTimer = 0,       -- 领域伤害结算计时器
         deathX = nil,
         deathY = nil,
-        -- 模式切换提示
-        modeSwitchText = nil,    -- { text, timer }
     }
     table.insert(GS.lords, lord)
     return lord
@@ -60,7 +56,7 @@ function Entities.createFollower(lord, fType)
         y = lord.y + math.sin(angle) * offset,
         factionId = lord.faction,
         lordId = lord.id,
-        fType = fType,  -- "peasant", "soldier", "knight", "archer"
+        fType = fType,  -- "peasant", "soldier", "archer", "healer"
         state = "following", -- following, working, attacking, returning
         targetId = nil,
         targetX = nil,
@@ -302,7 +298,7 @@ end
 
 --- 统计领主的各类随从数量
 --- @param lordId number
---- @return table<string, number> counts  e.g. { soldier = 3, knight = 2, ... }
+--- @return table<string, number> counts  e.g. { soldier = 3, archer = 2, ... }
 function Entities.countFollowersByType(lordId)
     local counts = {}
     for _, f in ipairs(GS.followers) do
@@ -313,11 +309,11 @@ function Entities.countFollowersByType(lordId)
     return counts
 end
 
---- 向后兼容：返回 soldiers, knights, archers（旧调用点暂时保留）
+--- 返回战斗随从数量
 function Entities.countCombatFollowers(lordId)
     local c = Entities.countFollowersByType(lordId)
     local total = (c.soldier or 0) + (c.archer or 0)
-    return total, 0, 0
+    return total
 end
 
 return Entities

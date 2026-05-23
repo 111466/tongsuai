@@ -134,8 +134,8 @@ function LordAI.updateAILord(lord, dt)
             if d < nearestEnemyDist then
                 nearestEnemyDist = d
                 nearestEnemy = el
-                local eS, eK, eA = Entities.countCombatFollowers(el.id)
-                enemySoldiers = eS + eK + eA  -- 总战斗单位数
+                local eCombat = Entities.countCombatFollowers(el.id)
+                enemySoldiers = eCombat
             end
         end
     end
@@ -254,20 +254,6 @@ function LordAI.updateAILord(lord, dt)
     lord.targetX = bestResX
     lord.targetY = bestResY
 
-    -- AI领主阵型自动切换（charge ↔ turtle）
-    local currentMode = lord.lordMode or "charge"
-    if myCombat < 3 or lord.hp < lord.maxHp * 0.3 then
-        -- 兵少或血低 → 铁桶阵
-        if currentMode ~= "turtle" then
-            lord.lordMode = "turtle"
-        end
-    elseif myCombat >= 5 and lord.hp > lord.maxHp * 0.6 then
-        -- 兵多且血高 → 冲锋阵
-        if currentMode ~= "charge" then
-            lord.lordMode = "charge"
-        end
-    end
-    -- 其他情况保持当前阵型
 end
 
 return LordAI

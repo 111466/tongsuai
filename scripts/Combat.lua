@@ -70,23 +70,15 @@ function Combat.processCombat(dt)
                             -- 在碰撞距离内：周期性攻击
                             fa.attackTimer = fa.attackTimer - dt
                             if fa.attackTimer <= 0 then
-                                -- 圣骑士护盾免疫
-                                if SkillSystem.isShielded(fb.x, fb.y, fb.factionId) then
-                                    Entities.spawnDamageNumber(fb.x, fb.y, 0, 200, 200, 255)
-                                    fa.attackTimer = CONFIG.UnitStats[fa.fType].atkInterval
-                                else
                                 local dmg = calcUnitDamage(fa.fType, fb.fType, fa.lordId)
                                 dmg = applyArmor(dmg, fb)
                                 fb.hp = fb.hp - dmg
-                                fb.hitTimer = 0.2  -- 受击反馈
-                                -- === 攻速buff：血祭狂暴 + 鼓手战鼓 ===
+                                fb.hitTimer = 0.2
                                 local baseInterval = CONFIG.UnitStats[fa.fType].atkInterval
                                 local frenzyMul = SkillSystem.getFrenzyAtkSpeedMul(fa.factionId)
-                                local drummerMul = SkillSystem.getDrummerAtkSpeedMul(fa.x, fa.y, fa.factionId)
-                                fa.attackTimer = baseInterval / (frenzyMul * drummerMul)
+                                fa.attackTimer = baseInterval / frenzyMul
                                 Entities.spawnDamageNumber(fb.x, fb.y, dmg, 255, 80, 80)
                                 Entities.spawnParticle((fa.x + fb.x)/2, (fa.y + fb.y)/2, 255, 200, 50, 3)
-                                -- === 吸血：血祭期间造成伤害回复HP ===
                                 local lifesteal = SkillSystem.getLifestealPct(fa.factionId)
                                 if lifesteal > 0 then
                                     local healAmt = math.floor(dmg * lifesteal)
@@ -96,28 +88,19 @@ function Combat.processCombat(dt)
                                         Entities.spawnDamageNumber(fa.x, fa.y, "+" .. healAmt, 100, 255, 100)
                                     end
                                 end
-                                end -- end shield else
                             end
                             -- 反击：被攻击方也可以攻击回来
                             if fb.fType ~= "archer" and fb.state == "attacking" then
                                 fb.attackTimer = fb.attackTimer - dt
                                 if fb.attackTimer <= 0 then
-                                    -- 圣骑士护盾免疫（反击）
-                                    if SkillSystem.isShielded(fa.x, fa.y, fa.factionId) then
-                                        Entities.spawnDamageNumber(fa.x, fa.y, 0, 200, 200, 255)
-                                        fb.attackTimer = CONFIG.UnitStats[fb.fType].atkInterval
-                                    else
                                     local dmgBack = calcUnitDamage(fb.fType, fa.fType, fb.lordId)
                                     dmgBack = applyArmor(dmgBack, fa)
                                     fa.hp = fa.hp - dmgBack
-                                    fa.hitTimer = 0.2  -- 受击反馈
-                                    -- === 攻速buff（反击方）：血祭狂暴 + 鼓手战鼓 ===
+                                    fa.hitTimer = 0.2
                                     local baseIntervalB = CONFIG.UnitStats[fb.fType].atkInterval
                                     local frenzyMulB = SkillSystem.getFrenzyAtkSpeedMul(fb.factionId)
-                                    local drummerMulB = SkillSystem.getDrummerAtkSpeedMul(fb.x, fb.y, fb.factionId)
-                                    fb.attackTimer = baseIntervalB / (frenzyMulB * drummerMulB)
+                                    fb.attackTimer = baseIntervalB / frenzyMulB
                                     Entities.spawnDamageNumber(fa.x, fa.y, dmgBack, 255, 80, 80)
-                                    -- === 吸血（反击方） ===
                                     local lifestealB = SkillSystem.getLifestealPct(fb.factionId)
                                     if lifestealB > 0 then
                                         local healB = math.floor(dmgBack * lifestealB)
@@ -127,7 +110,6 @@ function Combat.processCombat(dt)
                                             Entities.spawnDamageNumber(fb.x, fb.y, "+" .. healB, 100, 255, 100)
                                         end
                                     end
-                                    end -- end shield else (counter)
                                 end
                             end
                             -- 检查死亡
@@ -249,21 +231,16 @@ function Combat.processProjectiles(dt)
                         if f.alive and f.factionId ~= p.factionId then
                             local aoeDist = Utils.dist(p.x, p.y, f.x, f.y)
                             if aoeDist < p.aoeRadius then
-                                -- 圣骑士护盾免疫（AOE）
-                                if SkillSystem.isShielded(f.x, f.y, f.factionId) then
-                                    Entities.spawnDamageNumber(f.x, f.y, 0, 200, 200, 255)
-                                else
                                 local aoeDmg = calcUnitDamage(p.attackerType or "archer", f.fType, nil)
-                                aoeDmg = math.floor(aoeDmg * 0.6)  -- AOE 60% 伤害
+                                aoeDmg = math.floor(aoeDmg * 0.6)
                                 aoeDmg = applyArmor(aoeDmg, f)
                                 f.hp = f.hp - aoeDmg
-                                f.hitTimer = 0.2  -- 受击反馈
+                                f.hitTimer = 0.2
                                 Entities.spawnDamageNumber(f.x, f.y, aoeDmg, 160, 50, 220)
                                 if f.hp <= 0 then
                                     f.alive = false
                                     Entities.spawnParticle(f.x, f.y, 160, 50, 220, 4)
                                 end
-                                end -- end shield else (AOE)
                             end
                         end
                     end
@@ -274,12 +251,6 @@ function Combat.processProjectiles(dt)
                         if f.alive and f.factionId ~= p.factionId then
                             local hitDist = Utils.dist(p.x, p.y, f.x, f.y)
                             if hitDist < 12 then
-                                -- 圣骑士护盾免疫（箭矢）
-                                if SkillSystem.isShielded(f.x, f.y, f.factionId) then
-                                    Entities.spawnDamageNumber(f.x, f.y, 0, 200, 200, 255)
-                                    break
-                                end
-                                -- 箭矢命中：数值制伤害
                                 local dmg = calcUnitDamage(p.attackerType or "archer", f.fType, nil)
                                 dmg = applyArmor(dmg, f)
                                 f.hp = f.hp - dmg

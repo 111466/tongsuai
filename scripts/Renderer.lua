@@ -150,16 +150,7 @@ local unitTextures = {}    -- unitTextures[fType] = nvgImageHandle
 local UNIT_TEXTURE_FILES = {
     peasant        = "image/unit_peasant_20260521140902.png",
     soldier        = "image/unit_soldier_20260521140904.png",
-    knight         = "image/unit_knight_20260521140919.png",
     archer         = "image/unit_archer_20260521140903.png",
-
-    mage           = "image/unit_mage_20260521141316.png",
-    mounted_archer = "image/unit_mounted_archer_20260521141357.png",
-    advisor        = "image/unit_advisor_20260521141356.png",
-    vice_general   = "image/unit_vice_general_20260521141403.png",
-    drummer        = "image/unit_drummer_20260521141445.png",
-    paladin        = "image/unit_paladin_20260521141429.png",
-    assassin       = "image/unit_assassin_20260521141409.png",
 }
 
 -- ============================================================================
@@ -579,18 +570,11 @@ function M.drawLord(l)
 
     -- 光环（根据模式变化）
     if l.isPlayer or Utils.dist(GS.lords[1].x, GS.lords[1].y, l.x, l.y) < GS.screenW then
-        local modeCfg = CONFIG.LordModes[l.lordMode or "charge"] or CONFIG.LordModes["charge"]
-        local auraR = CONFIG.AuraRadius * modeCfg.auraMul
+        local auraR = CONFIG.AuraRadius
         if GS.fogActive then auraR = auraR * 0.7 end
         local asX, asY = Utils.worldToScreen(l.x, l.y)
         local aR, aG, aB = fc[1], fc[2], fc[3]
         local auraAlpha = 15
-
-        if l.lordMode == "turtle" then
-            -- 铁桶阵：蓝/银白色脉冲
-            aR, aG, aB = 80, 160, 255
-            auraAlpha = math.floor(10 + math.sin(GS.gameTime * 3) * 10 + 10)
-        end
 
         if GS.fogActive then
             aR = math.floor(aR * 0.6 + 128 * 0.4)
@@ -607,21 +591,6 @@ function M.drawLord(l)
         nvgStrokeColor(ctx, nvgRGBA(aR, aG, aB, 40))
         nvgStrokeWidth(ctx, 1)
         nvgStroke(ctx)
-
-        if l.lordMode == "turtle" then
-            -- 铁桶阵：内圈收缩效果（蓝/银白）
-            nvgBeginPath(ctx)
-            nvgCircle(ctx, asX, asY, auraR * 0.4)
-            nvgStrokeColor(ctx, nvgRGBA(100, 180, 255, 80))
-            nvgStrokeWidth(ctx, 2)
-            nvgStroke(ctx)
-            -- 第二层内圈（银白色，强调收缩感）
-            nvgBeginPath(ctx)
-            nvgCircle(ctx, asX, asY, auraR * 0.25)
-            nvgStrokeColor(ctx, nvgRGBA(200, 220, 255, 50))
-            nvgStrokeWidth(ctx, 1)
-            nvgStroke(ctx)
-        end
     end
 
     -- 领主身体 — 动态半径（用于UI层，如光环、血条）
@@ -840,33 +809,6 @@ function M.drawLord(l)
         nvgText(ctx, sx, crownY - 10, "玩家", nil)
     end
 
-    -- 模式切换提示文字
-    if l.modeSwitchText then
-        local t = l.modeSwitchText
-        local alpha = math.floor((t.timer / 1.0) * 255)
-        nvgFontFace(ctx, "sans")
-        nvgFontSize(ctx, 16)
-        nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
-        nvgFillColor(ctx, nvgRGBA(t.r, t.g, t.b, alpha))
-        nvgText(ctx, sx, sy - lordRadius - 14, t.text, nil)
-    end
-
-    -- 冲锋爆发光晕（切换冲锋阵后2秒内的橙红光环）
-    if (l.chargeBurstTimer or 0) > 0 then
-        local burstRatio = l.chargeBurstTimer / (CONFIG.LordModes["charge"].burstDuration or 2.0)
-        local burstAlpha = math.floor(burstRatio * 120)
-        local pulseR = lordRadius + 8 + math.sin(GS.gameTime * 12) * 3
-        nvgBeginPath(ctx)
-        nvgCircle(ctx, sx, sy, pulseR)
-        nvgStrokeColor(ctx, nvgRGBA(255, 140, 50, burstAlpha))
-        nvgStrokeWidth(ctx, 2.5)
-        nvgStroke(ctx)
-        -- 内层橙色辉光
-        nvgBeginPath(ctx)
-        nvgCircle(ctx, sx, sy, lordRadius + 3)
-        nvgFillColor(ctx, nvgRGBA(255, 100, 30, math.floor(burstRatio * 40)))
-        nvgFill(ctx)
-    end
 end
 
 function M.drawFollower(f)
@@ -1299,45 +1241,6 @@ function M.drawFollower(f)
         nvgFill(ctx)
     end
 
-    -- ========== 7) 骑士铁桶阵盾牌效果 ==========
-    if f.fType == "knight" then
-        local knightArmorMul = GS.tcGetKnightArmorMul(f.lordId)
-        if knightArmorMul < 1.0 then
-            if f.isShielding then
-                local shieldAlpha = 160 + math.floor(math.sin(GS.gameTime * 3) * 60)
-                nvgBeginPath(ctx)
-                nvgCircle(ctx, sx, drawY, radius + 6)
-                nvgStrokeColor(ctx, nvgRGBA(60, 140, 255, shieldAlpha))
-                nvgStrokeWidth(ctx, 3.5)
-                nvgStroke(ctx)
-                nvgBeginPath(ctx)
-                nvgCircle(ctx, sx, drawY, radius + 2)
-                nvgFillColor(ctx, nvgRGBA(80, 160, 255, 40))
-                nvgFill(ctx)
-            else
-                local shieldAlpha = 80 + math.floor(math.sin(GS.gameTime * 4) * 40)
-                nvgBeginPath(ctx)
-                nvgCircle(ctx, sx, drawY, radius + 4)
-                nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, shieldAlpha))
-                nvgStrokeWidth(ctx, 1.5)
-                nvgStroke(ctx)
-            end
-        end
-    end
-
-    -- ========== 8) 冲锋爆发速度线 ==========
-    if GS.tcGetChargeBurstMul(f.lordId) > 1.0 then
-        local trailAlpha = 60 + math.floor(math.sin(GS.gameTime * 10 + f.id) * 30)
-        local trailDx = -math.cos(f.angle or 0) * (radius + 4)
-        local trailDy = -math.sin(f.angle or 0) * (radius + 4)
-        nvgBeginPath(ctx)
-        nvgMoveTo(ctx, sx, drawY)
-        nvgLineTo(ctx, sx + trailDx, drawY + trailDy)
-        nvgStrokeColor(ctx, nvgRGBA(255, 140, 50, trailAlpha))
-        nvgStrokeWidth(ctx, 2)
-        nvgStroke(ctx)
-    end
-
     -- ========== 9) 攻击/采集状态指示 ==========
     if f.state == "attacking" then
         local flashAlpha = 150 + math.floor(math.sin(GS.gameTime * 8) * 100)
@@ -1353,35 +1256,8 @@ function M.drawFollower(f)
         nvgFill(ctx)
     end
 
-    -- ========== 10) 突击出击：速度拖尾 + 橙色光环 ==========
-    local sqCache = f.squadStateCache
-    if sqCache == "charging" then
-        -- 橙色脉冲外环
-        local chargePulse = 0.8 + math.sin(GS.gameTime * 8 + (f.id or 0)) * 0.2
-        local chargeAlpha = math.floor(120 * chargePulse)
-        nvgBeginPath(ctx)
-        nvgCircle(ctx, sx, drawY, radius + 5)
-        nvgStrokeColor(ctx, nvgRGBA(255, 160, 30, chargeAlpha))
-        nvgStrokeWidth(ctx, 2)
-        nvgStroke(ctx)
-        -- 速度拖尾线（3条）
-        for i = 1, 3 do
-            local tOff = i * 0.3
-            local trailAlpha = math.floor(80 - i * 20)
-            local trailLen = (radius + 2 + i * 3)
-            local tdx = -math.cos(f.angle or 0) * trailLen
-            local tdy = -math.sin(f.angle or 0) * trailLen
-            nvgBeginPath(ctx)
-            nvgMoveTo(ctx, sx, drawY)
-            nvgLineTo(ctx, sx + tdx, drawY + tdy)
-            nvgStrokeColor(ctx, nvgRGBA(255, 180, 50, trailAlpha))
-            nvgStrokeWidth(ctx, 2 - i * 0.4)
-            nvgStroke(ctx)
-        end
-    end
-
-    -- ========== 11) 逃散/逃跑：蓝色闪烁 + 恐惧标记 ==========
-    if sqCache == "scattered" or sqCache == "fleeing" then
+    -- ========== 11) 巨兽惊吓：蓝色闪烁 + 恐惧标记 ==========
+    if f.beastScaredTimer and f.beastScaredTimer > 0 then
         -- 蓝白闪烁外环
         local scatterPulse = math.sin(GS.gameTime * 12 + (f.id or 0) * 0.5)
         local scatterAlpha = math.floor(100 + scatterPulse * 60)

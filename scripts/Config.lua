@@ -131,24 +131,7 @@ local CONFIG = {
         healer   = { hp = 45,  atk = 0,  atkInterval = 99  },
     },
     DamageMultiplierDisabled = true,
-    LordModes = {
-        charge = {  -- 冲锋阵（默认）：自由索敌，主动冲锋
-            speedMul = 1.0,
-            auraMul = 1.0,
-            searchMul = 1.0,
-            knockbackImmune = false,
-            burstSpeedMul = 1.5,
-            burstDuration = 2.0,
-        },
-        turtle = {  -- 铁桶阵：收缩聚拢，全军免疫击退
-            speedMul = 0.7,
-            auraMul = 0.7,
-            searchMul = 0.7,
-            knockbackImmune = true,
-            burstSpeedMul = 1.0,
-            burstDuration = 0,
-        },
-    },
+
 
     -- ========== 领主主动技能 ==========
     Skills = {
@@ -159,7 +142,6 @@ local CONFIG = {
         },
         focusFire = {
             cd = 12, duration = 5,
-            knightSpeedBonus = 0.3,
         },
         barricade = {
             cd = 10, woodCost = 15,
@@ -190,9 +172,6 @@ local CONFIG = {
 
     -- 兵种分类
     UnitCategories = {
-        melee    = { "soldier" },
-        ranged   = { "archer" },
-        support  = { "healer" },
         gatherer = { "peasant" },
     },
     IsCombatUnit = {
@@ -201,16 +180,6 @@ local CONFIG = {
     IsRangedUnit = {
         archer = true,
     },
-
-    -- ========== 突击出击系统 ==========
-    ChargeSpeedMul        = 3.0,   -- 突击移速倍率（300%）
-    ChargeMaxDuration     = 15.0,  -- 突击最大持续时间（秒），超时自动召回
-    DefectionCheckInterval = 2.0,  -- 劝降检测间隔（秒）
-    DefectionBaseChance   = 0.05,  -- 基础劝降概率（5%每次检测）
-    DefectionNearEnemyMul = 2.0,   -- 靠近敌方领主时劝降概率倍率
-    DefectionNearEnemyDist = 200,  -- "靠近敌方领主"的距离阈值
-    DefectionFleeSpeed    = 2.0,   -- 劝降后逃窜移速倍率
-    DefectionFleeDuration = 3.0,   -- 劝降逃窜持续时间（秒）
 
     -- ========== 巨兽危险区系统 ==========
     BeastBodyRadius       = 50,    -- 巨兽身体半径（像素）

@@ -22,19 +22,12 @@ local Combat = require("Combat")
 local Renderer = require("Renderer")
 local GameUI = require("GameUI")
 local SkillSystem = require("SkillSystem")
-local CampaignState = require("CampaignState")
 local CampaignData = require("CampaignData")
-local PresetManager = require("PresetManager")
-local EndlessMode = require("EndlessMode")
 local ShopSystem = require("ShopSystem")
-local SquadSystem = require("SquadSystem")
 local GiantBeastSystem = require("GiantBeastSystem")
-local CodexState = require("CodexState")
 
 -- UI 菜单模块
 local MainMenuUI = require("MainMenuUI")
-local CampaignSelectUI = require("CampaignSelectUI")
-local EndlessShopUI = require("EndlessShopUI")
 local MenuTheme = require("MenuTheme")
 
 -- NanoVG 上下文（仅入口持有，通过 Renderer.init 传递）
@@ -64,42 +57,19 @@ local function initGame(mode)
     GS.gameState = "playing"
     GS.settledGlory = 0
     GS.nextId = 0
-    GS.squads = {}
     GS.giantBeasts = {}
 
-    -- 重置战术指令状态
-    GS.tcReset()
+    GiantBeastSystem.init()
 
     -- 初始化技能系统
     SkillSystem.init()
 
-    -- 战役模式：用关卡数据覆盖地图尺寸和资源
-    local campaignLevel = nil
-    if mode == "campaign" and GS.selectedLevelId then
-        campaignLevel = CampaignData.getLevel(GS.selectedLevelId)
-        if campaignLevel then
-            CONFIG.MapWidth = campaignLevel.map_size.w
-            CONFIG.MapHeight = campaignLevel.map_size.h
-            print("[CAMPAIGN] Level " .. GS.selectedLevelId .. " map=" .. CONFIG.MapWidth .. "x" .. CONFIG.MapHeight)
-        end
-    end
-
     -- 创建资源
-    if mode == "skirmish" or mode == "endless" then
-        for i = 1, CONFIG.ResourceCount do
-            if math.random() < 0.7 then
-                Entities.createResource("tree")
-            else
-                Entities.createResource("mine")
-            end
-        end
-    elseif mode == "campaign" and campaignLevel then
-        for i = 1, (campaignLevel.resources or 30) do
-            if math.random() < 0.7 then
-                Entities.createResource("tree")
-            else
-                Entities.createResource("mine")
-            end
+    for i = 1, CONFIG.ResourceCount do
+        if math.random() < 0.7 then
+            Entities.createResource("tree")
+        else
+            Entities.createResource("mine")
         end
     end
 
@@ -111,74 +81,30 @@ local function initGame(mode)
     )
 
     -- 给玩家初始兵种
-    if mode == "campaign" and campaignLevel and campaignLevel.player_start then
-        for unitType, count in pairs(campaignLevel.player_start) do
-            for i = 1, count do
-                Entities.createFollower(playerLord, unitType)
-            end
-        end
-    else
-        for i = 1, CONFIG.InitPeasants do
-            Entities.createFollower(playerLord, "peasant")
-        end
+    for i = 1, CONFIG.InitPeasants do
+        Entities.createFollower(playerLord, "peasant")
     end
 
-    if mode == "skirmish" then
-        -- 遭遇战模式：创建 AI 领主（与现有逻辑相同）
-        local spawnPositions = {
-            {CONFIG.MapWidth * 0.2, CONFIG.MapHeight * 0.2},
-            {CONFIG.MapWidth * 0.8, CONFIG.MapHeight * 0.2},
-            {CONFIG.MapWidth * 0.2, CONFIG.MapHeight * 0.8},
-            {CONFIG.MapWidth * 0.8, CONFIG.MapHeight * 0.8},
-        }
-        for i = 1, CONFIG.AILordCount do
-            local sp = spawnPositions[i]
-            local aiLord = Entities.createLord(sp[1], sp[2], i + 1, false)
-            aiLord.wood = 30
-            for j = 1, CONFIG.InitPeasants do
-                Entities.createFollower(aiLord, "peasant")
-            end
+    -- 创建 AI 领主
+    local spawnPositions = {
+        {CONFIG.MapWidth * 0.2, CONFIG.MapHeight * 0.2},
+        {CONFIG.MapWidth * 0.8, CONFIG.MapHeight * 0.2},
+        {CONFIG.MapWidth * 0.2, CONFIG.MapHeight * 0.8},
+        {CONFIG.MapWidth * 0.8, CONFIG.MapHeight * 0.8},
+    }
+    for i = 1, CONFIG.AILordCount do
+        local sp = spawnPositions[i]
+        local aiLord = Entities.createLord(sp[1], sp[2], i + 1, false)
+        aiLord.wood = 30
+        for j = 1, CONFIG.InitPeasants do
+            Entities.createFollower(aiLord, "peasant")
         end
-
-    elseif mode == "campaign" then
-        -- 战役模式：根据关卡配置创建敌方领主和随从
-        if campaignLevel and campaignLevel.enemies then
-            -- 敌方出生点（分布在地图边缘区域，远离中心玩家）
-            local enemySpawns = {
-                {CONFIG.MapWidth * 0.2, CONFIG.MapHeight * 0.2},
-                {CONFIG.MapWidth * 0.8, CONFIG.MapHeight * 0.2},
-                {CONFIG.MapWidth * 0.2, CONFIG.MapHeight * 0.8},
-                {CONFIG.MapWidth * 0.8, CONFIG.MapHeight * 0.8},
-            }
-            for i, enemyGroup in ipairs(campaignLevel.enemies) do
-                local sp = enemySpawns[((i - 1) % #enemySpawns) + 1]
-                local aiLord = Entities.createLord(sp[1], sp[2], i + 1, false)
-                aiLord.wood = 20
-
-                -- 创建该组的所有兵种
-                for unitType, count in pairs(enemyGroup.units) do
-                    for j = 1, count do
-                        Entities.createFollower(aiLord, unitType)
-                    end
-                end
-
-                print("[CAMPAIGN] Enemy lord " .. i .. " faction=" .. aiLord.faction
-                    .. " at (" .. math.floor(sp[1]) .. "," .. math.floor(sp[2]) .. ")")
-            end
-        end
-
-    elseif mode == "endless" then
-        -- 无尽模式：EndlessMode 负责波次生成
-        EndlessMode.start()
     end
 
     -- Boss 计时（遭遇战专属）
     GS.bossSpawnTimer = 0
     GS.nextBossSpawnTime = Utils.randomRange(CONFIG.BossSpawnMin, CONFIG.BossSpawnMax)
     GS.resourceRespawnTimer = 0
-
-    -- 巨兽危险区初始化
-    GiantBeastSystem.init()
 
     -- 事件系统初始化
     EventSystem.init()
@@ -226,31 +152,21 @@ local function updateGame(dt)
 
     GS.gameTime = GS.gameTime + dt
 
-    -- 更新冲锋爆发计时器
-    for _, l in ipairs(GS.lords) do
-        if l.alive and (l.chargeBurstTimer or 0) > 0 then
-            l.chargeBurstTimer = l.chargeBurstTimer - dt
-            if l.chargeBurstTimer < 0 then l.chargeBurstTimer = 0 end
-        end
-    end
-
     -- 更新随机事件系统
     EventSystem.update(dt)
 
     -- 更新全局buff
     updateGlobalBuffs(dt)
 
-    -- 玩家领主移动（受战术指令移速倍率影响）
+    -- 玩家领主移动
     local playerLord = GS.lords[1]
     if playerLord and playerLord.alive then
         local moveLen = math.sqrt(GS.joystickX * GS.joystickX + GS.joystickY * GS.joystickY)
         if moveLen > 0.1 then
             local nx, ny = GS.joystickX / moveLen, GS.joystickY / moveLen
-            local lordSpeedMul = GS.tcGetLordSpeedMul(playerLord.id)
-            local burstMul = GS.tcGetChargeBurstMul(playerLord.id)
             local globalSpd = getGlobalSpeedMul()
-            playerLord.x = playerLord.x + nx * CONFIG.LordSpeed * lordSpeedMul * burstMul * globalSpd * dt
-            playerLord.y = playerLord.y + ny * CONFIG.LordSpeed * lordSpeedMul * burstMul * globalSpd * dt
+            playerLord.x = playerLord.x + nx * CONFIG.LordSpeed * globalSpd * dt
+            playerLord.y = playerLord.y + ny * CONFIG.LordSpeed * globalSpd * dt
             playerLord.angle = math.atan2(ny, nx)
         end
         playerLord.x = Utils.clamp(playerLord.x, 20, CONFIG.MapWidth - 20)
@@ -331,16 +247,14 @@ local function updateGame(dt)
             l.hitAnimTimer = math.max(0, (l.hitAnimTimer or 0) - dt)
             LordAI.updateAILord(l, dt)
 
-            -- 移动AI领主向目标（受战术指令移速倍率影响）
+            -- 移动AI领主向目标
             if l.targetX and l.targetY then
                 local d = Utils.dist(l.x, l.y, l.targetX, l.targetY)
                 if d > 20 then
                     local dx, dy = Utils.normalize(l.targetX - l.x, l.targetY - l.y)
-                    local aiLordSpeedMul = GS.tcGetLordSpeedMul(l.id)
-                    local aiBurstMul = GS.tcGetChargeBurstMul(l.id)
                     local gSpd = getGlobalSpeedMul()
-                    l.x = l.x + dx * CONFIG.LordSpeed * 0.9 * aiLordSpeedMul * aiBurstMul * gSpd * dt
-                    l.y = l.y + dy * CONFIG.LordSpeed * 0.9 * aiLordSpeedMul * aiBurstMul * gSpd * dt
+                    l.x = l.x + dx * CONFIG.LordSpeed * 0.9 * gSpd * dt
+                    l.y = l.y + dy * CONFIG.LordSpeed * 0.9 * gSpd * dt
                     l.angle = math.atan2(dy, dx)
                 end
             end
@@ -371,23 +285,6 @@ local function updateGame(dt)
 
     -- 巨兽危险区更新（在小队之前，以便触发scatter）
     GiantBeastSystem.update(dt)
-
-    -- 副将小队更新
-    SquadSystem.update(dt)
-
-    -- 无尽模式更新
-    if GS.gameMode == "endless" then
-        EndlessMode.update(dt)
-        -- 检测波次清除后进入商店阶段
-        if GS.endlessState == "shop" and GS.gameState == "playing" then
-            GS.gameState = "endless_shop"
-            local info = EndlessMode.getWaveInfo()
-            EndlessShopUI.show(info.wave, function()
-                GS.gameState = "playing"
-                EndlessMode.nextWave()
-            end)
-        end
-    end
 
     -- 战斗处理
     Combat.processCombat(dt)
@@ -584,16 +481,6 @@ function Start()
     TS.loadFromCloud(function()
         print("[CLOUD] TalentSystem loaded")
     end)
-    CampaignState.loadFromCloud(function()
-        print("[CLOUD] CampaignState loaded")
-    end)
-    PresetManager.loadFromCloud(function()
-        print("[CLOUD] PresetManager loaded")
-    end)
-    CodexState.loadFromCloud(function()
-        print("[CLOUD] CodexState loaded")
-    end)
-
     print("=== Code: Commander Started ===")
 end
 
@@ -618,11 +505,6 @@ function HandleUpdate(eventType, eventData)
     -- 菜单状态路由
     if GS.gameState == "main_menu" then
         MainMenuUI.updatePreview(dt)
-        return
-    elseif GS.gameState == "campaign_select" then
-        return
-    elseif GS.gameState == "endless_shop" then
-        EndlessShopUI.updateCountdown(dt)
         return
     end
 
@@ -806,16 +688,6 @@ function HandleKeyDown(eventType, eventData)
 
     -- 战术指令快捷键
     if GS.gameState == "playing" and GS.lords[1] and GS.lords[1].alive then
-        -- 突击出击/召回快捷键
-        if key == KEY_E then
-            local lordId = GS.lords[1].id
-            if SquadSystem.hasChargingSquad(lordId) then
-                SquadSystem.recallSquad(lordId, 1)
-            else
-                SquadSystem.startCharge(lordId, 1)
-            end
-        end
-
         -- 技能快捷键 KEY_1 ~ KEY_6
         local skillKeys = {
             [KEY_1] = "dash",
@@ -867,8 +739,7 @@ function HandleNanoVGRender(eventType, eventData)
     end
 
     -- 非游戏状态不绘制（但显示加载提示以区分黑屏原因）
-    if GS.gameState == "talent_select" or GS.gameState == "loading"
-        or GS.gameState == "campaign_select" then
+    if GS.gameState == "talent_select" or GS.gameState == "loading" then
         if GS.gameState == "loading" then
             nvgFontFace(nvg, "sans")
             nvgFontSize(nvg, 22)

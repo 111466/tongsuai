@@ -15,28 +15,17 @@ local EM = {}
 -- 难度曲线配置
 -- =========================================================================
 local WAVE_CONFIG = {
-    baseEnemyCount   = 5,      -- 第 1 波敌兵数
-    countGrowthPct   = 10,     -- 每波兵力 +10%
-    eliteInterval    = 5,      -- 每 5 波一次精英波
-    bossInterval     = 10,     -- 每 10 波一次 Boss 波
-    formationWave    = 10,     -- 第 10 波起敌方使用阵型
-    specialUnitWave  = 20,     -- 第 20 波起敌方出现特殊兵种
-    warCoinPerKill   = 2,      -- 每击杀获得战功币
-    eliteCoinMul     = 2,      -- 精英波双倍货币
+    baseEnemyCount   = 5,
+    countGrowthPct   = 10,
+    eliteInterval    = 5,
+    bossInterval     = 10,
+    warCoinPerKill   = 2,
+    eliteCoinMul     = 2,
 }
 
 -- 根据波次决定敌方可用兵种列表
-local function getEnemyUnitPool(wave)
-    local pool = { "soldier", "archer" }
-    if wave >= 3 then pool[#pool + 1] = "knight" end
-
-    if wave >= 8 then pool[#pool + 1] = "mage" end
-    if wave >= 12 then pool[#pool + 1] = "mounted_archer" end
-    if wave >= WAVE_CONFIG.specialUnitWave then
-        pool[#pool + 1] = "paladin"
-        pool[#pool + 1] = "assassin"
-    end
-    return pool
+local function getEnemyUnitPool()
+    return { "soldier", "archer" }
 end
 
 -- =========================================================================
@@ -94,17 +83,10 @@ function EM.nextWave()
     GS.endlessEnemies = { waveLord.id }
 
     -- 获取兵种池并生成随从
-    local pool = getEnemyUnitPool(wave)
+    local pool = getEnemyUnitPool()
     for i = 1, count do
         local unitType = pool[math.random(1, #pool)]
         Entities.createFollower(waveLord, unitType)
-    end
-
-    -- 第 10 波起敌方使用阵型
-    if wave >= WAVE_CONFIG.formationWave then
-        local formations = { "cone", "phalanx", "arc", "crane_wing" }
-        local pick = formations[math.random(1, #formations)]
-        GS.setFormation(waveLord.id, pick)
     end
 
     -- Boss 波额外刷 Boss 实体

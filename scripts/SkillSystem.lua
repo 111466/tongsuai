@@ -11,9 +11,8 @@ local Entities = require("Entities")
 
 local SkillSystem = {}
 
--- 技能名称列表（按键位 1-10 对应）
-local SKILL_ORDER = { "dash", "focusFire", "barricade", "repel", "bloodSacrifice", "bounty",
-                       "advisorReveal", "drummerWarDrum", "paladinShield", "assassinStrike" }
+-- 技能名称列表（按键位 1-6 对应）
+local SKILL_ORDER = { "dash", "focusFire", "barricade", "repel", "bloodSacrifice", "bounty" }
 
 -- 技能中文名称
 local SKILL_NAMES = {
@@ -23,10 +22,6 @@ local SKILL_NAMES = {
     repel = "光环斥力",
     bloodSacrifice = "血祭",
     bounty = "重金悬赏",
-    advisorReveal = "洞察全局",
-    drummerWarDrum = "战鼓激励",
-    paladinShield = "神圣护盾",
-    assassinStrike = "暗影突袭",
 }
 
 -- ============================================================================
@@ -39,11 +34,6 @@ function SkillSystem.init()
     GS.barricades = {}
     GS.bountyChests = {}
     GS.skillSelectingTarget = false
-    -- 特殊兵种技能状态
-    GS.advisorRevealState = nil
-    GS.drummerBuffState = nil
-    GS.paladinShieldState = nil
-    GS.assassinStrikeState = nil
     for _, name in ipairs(SKILL_ORDER) do
         GS.skillCooldowns[name] = 0
         GS.skillStates[name] = nil
@@ -94,14 +84,6 @@ local function getPlayerFollowers(lord)
     return result
 end
 
---- 检查领主是否拥有指定类型的存活单位
-local function hasUnitType(lord, fType)
-    for _, f in ipairs(GS.followers) do
-        if f.alive and f.lordId == lord.id and f.fType == fType then return true end
-    end
-    return false
-end
-
 -- ============================================================================
 -- 能否释放判断
 -- ============================================================================
@@ -138,17 +120,6 @@ function SkillSystem.canActivate(skillId)
         end
     end
 
-    -- 特殊兵种技能需要拥有对应兵种
-    if skillId == "advisorReveal" then
-        if not hasUnitType(lord, "advisor") then return false, "需要军师" end
-    elseif skillId == "drummerWarDrum" then
-        if not hasUnitType(lord, "drummer") then return false, "需要鼓手" end
-    elseif skillId == "paladinShield" then
-        if not hasUnitType(lord, "paladin") then return false, "需要圣骑士" end
-    elseif skillId == "assassinStrike" then
-        if not hasUnitType(lord, "assassin") then return false, "需要刺客" end
-    end
-
     return true
 end
 
@@ -178,14 +149,6 @@ function SkillSystem.activate(skillId, ...)
         SkillSystem._activateBloodSacrifice(cfg)
     elseif skillId == "bounty" then
         SkillSystem._activateBounty(cfg)
-    elseif skillId == "advisorReveal" then
-        return SkillSystem._activateAdvisorReveal(getPlayerLord())
-    elseif skillId == "drummerWarDrum" then
-        return SkillSystem._activateDrummerWarDrum(getPlayerLord())
-    elseif skillId == "paladinShield" then
-        return SkillSystem._activatePaladinShield(getPlayerLord())
-    elseif skillId == "assassinStrike" then
-        return SkillSystem._activateAssassinStrike(getPlayerLord())
     end
 
     print("[SKILL] Activated: " .. SKILL_NAMES[skillId])
@@ -257,8 +220,7 @@ local function _updateDash(dt)
                 if f.alive and f.factionId ~= lord.faction then
                     local d = Utils.dist(lord.x, lord.y, f.x, f.y)
                     if d < cfg.interruptRadius then
-                        -- 铁桶阵免疫击退
-                        if not GS.tcIsKnockbackImmune(f.lordId) then
+                        if true then
                             local dx, dy = Utils.normalize(f.x - lord.x, f.y - lord.y)
                             f.x = f.x + dx * cfg.knockback
                             f.y = f.y + dy * cfg.knockback
@@ -425,8 +387,7 @@ function SkillSystem._activateRepel(cfg)
 
     for _, f in ipairs(GS.followers) do
         if f.alive and f.factionId ~= lord.faction then
-            -- 只推近战单位（非弓箭手），铁桶阵免疫
-            if f.fType ~= "archer" and not GS.tcIsKnockbackImmune(f.lordId) then
+            if f.fType ~= "archer" then
                 local d = Utils.dist(lord.x, lord.y, f.x, f.y)
                 if d < auraR then
                     local dx, dy = Utils.normalize(f.x - lord.x, f.y - lord.y)
@@ -573,232 +534,6 @@ local function _updateBountyChests(dt)
 end
 
 -- ============================================================================
--- 军师：洞察全局
--- ============================================================================
-
-function SkillSystem._activateAdvisorReveal(lord)
-    local advisor = nil
-    for _, f in ipairs(GS.followers) do
-        if f.alive and f.lordId == lord.id and f.fType == "advisor" then
-            advisor = f
-            break
-        end
-    end
-    if not advisor then return false end
-
-    local cfg = CONFIG.Skills.advisorReveal
-    GS.advisorRevealState = {
-        active = true,
-        x = advisor.x, y = advisor.y,
-        timer = cfg.duration,
-        radius = cfg.revealRadius,
-    }
-    GS.skillCooldowns.advisorReveal = cfg.cd
-    print("[SKILL] Advisor Reveal activated")
-    return true
-end
-
-local function _updateAdvisorReveal(dt)
-    local s = GS.advisorRevealState
-    if not s or not s.active then return end
-    s.timer = s.timer - dt
-    if s.timer <= 0 then
-        s.active = false
-        GS.advisorRevealState = nil
-    end
-end
-
---- 查询某位置是否在军师洞察范围内
-function SkillSystem.isInRevealRange(x, y)
-    local s = GS.advisorRevealState
-    if not s or not s.active then return false end
-    return Utils.dist(x, y, s.x, s.y) < s.radius
-end
-
--- ============================================================================
--- 鼓手：战鼓激励
--- ============================================================================
-
-function SkillSystem._activateDrummerWarDrum(lord)
-    local drummer = nil
-    for _, f in ipairs(GS.followers) do
-        if f.alive and f.lordId == lord.id and f.fType == "drummer" then
-            drummer = f
-            break
-        end
-    end
-    if not drummer then return false end
-
-    local cfg = CONFIG.Skills.drummerWarDrum
-    GS.drummerBuffState = {
-        active = true,
-        x = drummer.x, y = drummer.y,
-        timer = cfg.duration,
-        radius = cfg.buffRadius,
-        mul = cfg.atkSpeedMul,
-    }
-    GS.skillCooldowns.drummerWarDrum = cfg.cd
-    print("[SKILL] Drummer War Drum activated")
-    return true
-end
-
-local function _updateDrummerWarDrum(dt)
-    local s = GS.drummerBuffState
-    if not s or not s.active then return end
-    s.timer = s.timer - dt
-    if s.timer <= 0 then
-        s.active = false
-        GS.drummerBuffState = nil
-    end
-end
-
---- 查询某单位是否受鼓手激励（返回攻速倍率）
-function SkillSystem.getDrummerAtkSpeedMul(x, y, factionId)
-    local s = GS.drummerBuffState
-    if not s or not s.active then return 1.0 end
-    if Utils.dist(x, y, s.x, s.y) < s.radius then
-        return s.mul
-    end
-    return 1.0
-end
-
--- ============================================================================
--- 圣骑士：神圣护盾
--- ============================================================================
-
-function SkillSystem._activatePaladinShield(lord)
-    local paladin = nil
-    for _, f in ipairs(GS.followers) do
-        if f.alive and f.lordId == lord.id and f.fType == "paladin" then
-            paladin = f
-            break
-        end
-    end
-    if not paladin then return false end
-
-    local cfg = CONFIG.Skills.paladinShield
-    GS.paladinShieldState = {
-        active = true,
-        x = paladin.x, y = paladin.y,
-        timer = cfg.duration,
-        radius = cfg.shieldRadius,
-        followUnit = paladin,
-    }
-    GS.skillCooldowns.paladinShield = cfg.cd
-    print("[SKILL] Paladin Shield activated")
-    return true
-end
-
-local function _updatePaladinShield(dt)
-    local s = GS.paladinShieldState
-    if not s or not s.active then return end
-    s.timer = s.timer - dt
-    -- 跟随圣骑士位置
-    if s.followUnit and s.followUnit.alive then
-        s.x = s.followUnit.x
-        s.y = s.followUnit.y
-    end
-    if s.timer <= 0 then
-        s.active = false
-        GS.paladinShieldState = nil
-    end
-end
-
---- 查询某单位是否在护盾范围内（免疫伤害）
-function SkillSystem.isShielded(x, y, factionId)
-    local s = GS.paladinShieldState
-    if not s or not s.active then return false end
-    return Utils.dist(x, y, s.x, s.y) < s.radius
-end
-
--- ============================================================================
--- 刺客：暗影突袭
--- ============================================================================
-
-function SkillSystem._activateAssassinStrike(lord)
-    local assassin = nil
-    for _, f in ipairs(GS.followers) do
-        if f.alive and f.lordId == lord.id and f.fType == "assassin" then
-            assassin = f
-            break
-        end
-    end
-    if not assassin then return false end
-
-    -- 找到最近的敌方单位作为目标
-    local cfg = CONFIG.Skills.assassinStrike
-    local target = nil
-    local minDist = cfg.targetSearchRadius
-    for _, f in ipairs(GS.followers) do
-        if f.alive and f.factionId ~= assassin.factionId then
-            local d = Utils.dist(assassin.x, assassin.y, f.x, f.y)
-            if d < minDist then
-                minDist = d
-                target = f
-            end
-        end
-    end
-    if not target then return false end
-
-    GS.assassinStrikeState = {
-        active = true,
-        unitId = assassin.id,
-        targetId = target.id,
-        timer = cfg.stealthDuration,
-        phase = "stealth",
-        damageMul = cfg.damageMul,
-    }
-    assassin.stealthed = true
-    GS.skillCooldowns.assassinStrike = cfg.cd
-    print("[SKILL] Assassin Strike activated, target: " .. target.fType)
-    return true
-end
-
-local function _updateAssassinStrike(dt)
-    local s = GS.assassinStrikeState
-    if not s or not s.active then return end
-
-    local assassin = nil
-    local target = nil
-    for _, f in ipairs(GS.followers) do
-        if f.id == s.unitId then assassin = f end
-        if f.id == s.targetId then target = f end
-    end
-
-    if not assassin or not assassin.alive or not target or not target.alive then
-        if assassin then assassin.stealthed = false end
-        s.active = false
-        GS.assassinStrikeState = nil
-        return
-    end
-
-    if s.phase == "stealth" then
-        s.timer = s.timer - dt
-        -- 隐身期间快速移向目标
-        local dx, dy = Utils.normalize(target.x - assassin.x, target.y - assassin.y)
-        assassin.x = assassin.x + dx * CONFIG.FollowerSpeed * 3.0 * dt
-        assassin.y = assassin.y + dy * CONFIG.FollowerSpeed * 3.0 * dt
-
-        local dist = Utils.dist(assassin.x, assassin.y, target.x, target.y)
-        if dist < 15 or s.timer <= 0 then
-            -- 执行致命一击
-            s.phase = "strike"
-            assassin.stealthed = false
-            local baseDmg = CONFIG.UnitStats.assassin.atk
-            local finalDmg = math.floor(baseDmg * s.damageMul)
-            target.hp = target.hp - finalDmg
-            Entities.spawnDamageNumber(target.x, target.y, finalDmg, 255, 50, 50)
-            if target.hp <= 0 then
-                target.alive = false
-                Entities.spawnParticle(target.x, target.y, 100, 0, 100, 8)
-            end
-            s.active = false
-            GS.assassinStrikeState = nil
-        end
-    end
-end
-
--- ============================================================================
 -- 每帧更新（由 main.lua 调用）
 -- ============================================================================
 
@@ -822,11 +557,6 @@ function SkillSystem.update(dt)
     _updateRepel(dt)
     _updateBloodSacrifice(dt)
     _updateBountyChests(dt)
-    -- 特殊兵种技能
-    _updateAdvisorReveal(dt)
-    _updateDrummerWarDrum(dt)
-    _updatePaladinShield(dt)
-    _updateAssassinStrike(dt)
 end
 
 -- ============================================================================
@@ -855,14 +585,7 @@ function SkillSystem.getFocusFireTarget()
     return nil, nil
 end
 
---- 集火骑士加速倍率
-function SkillSystem.getFocusFireKnightSpeedBonus()
-    local state = GS.skillStates.focusFire
-    if state then
-        return CONFIG.Skills.focusFire.knightSpeedBonus
-    end
-    return 0
-end
+
 
 --- 获取狂暴攻速倍率（Combat 用）
 function SkillSystem.getFrenzyAtkSpeedMul(factionId)

@@ -53,13 +53,6 @@ local ALL_ITEMS = {
         end,
     },
     {
-        id = "recruit_knights_2", name = "补充 2 个骑士",
-        desc = "立即招募 2 个骑士", cost = 20, tier = "normal",
-        apply = function(lord)
-            for i = 1, 2 do Entities.createFollower(lord, "knight") end
-        end,
-    },
-    {
         id = "lord_heal_full", name = "领主满血恢复",
         desc = "领主生命值完全回满", cost = 8, tier = "normal",
         apply = function(lord)
@@ -67,15 +60,6 @@ local ALL_ITEMS = {
         end,
     },
     -- ===== 稀有 (每 5 波新增) =====
-    {
-        id = "recruit_special_1", name = "招募 1 个特殊兵种",
-        desc = "随机招募一个圣骑/刺客/鼓手", cost = 30, tier = "rare",
-        apply = function(lord)
-            local specials = { "paladin", "assassin", "drummer" }
-            local pick = specials[math.random(1, #specials)]
-            Entities.createFollower(lord, pick)
-        end,
-    },
     {
         id = "armor_20_perm", name = "全军护甲 +20%（永久）",
         desc = "本局剩余所有波次生效", cost = 35, tier = "rare",
