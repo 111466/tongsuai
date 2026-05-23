@@ -553,6 +553,7 @@ function HandleUpdate(eventType, eventData)
     local numTouches = input.numTouches
     local touchOnAtkBtn = false
     local joystickTouched = false
+    local aimingFingerFound = false
 
     for i = 0, numTouches - 1 do
         local touch = input:GetTouch(i)
@@ -560,17 +561,18 @@ function HandleUpdate(eventType, eventData)
             local tx = touch.position.x
             local ty = touch.position.y
 
-            -- 检测是否点击了攻击按钮热区（右下角圆形区域）
+            if GS.skillAiming and touch.touchID == GS.skillAiming.fingerId then
+                aimingFingerFound = true
+                goto touchContinue
+            end
+
             local distToBtn = math.sqrt((tx - atkBtnX)^2 + (ty - atkBtnY)^2)
             if distToBtn <= atkBtnR * 1.3 then
                 touchOnAtkBtn = true
-                -- 新按下（touchedState 为 began）时触发一次攻击
                 if touch.delta.x == 0 and touch.delta.y == 0 then
-                    -- 刚按下（delta为零是新触点的特征），触发攻击
                     GS.attackBtnTriggered = true
                 end
             elseif tx < GS.screenW / 2 then
-                -- 左半屏为摇杆区域
                 joystickTouched = true
                 if not GS.joystickActive then
                     GS.joystickActive = true
@@ -589,6 +591,7 @@ function HandleUpdate(eventType, eventData)
                 GS.joystickY = dy / maxDist
             end
         end
+        ::touchContinue::
     end
 
     -- 更新攻击按钮视觉状态
@@ -618,22 +621,24 @@ function HandleUpdate(eventType, eventData)
         local aimSX, aimSY
         local aiming = GS.skillAiming
         if aiming.fingerId == nil then
-            -- 鼠标模式：直接取鼠标位置
             if input:GetMouseButtonDown(MOUSEB_LEFT) then
                 local mpos = input:GetMousePosition()
                 aimSX, aimSY = mpos.x, mpos.y
             end
         else
-            -- 触摸模式：按 fingerId 找对应的手指（实时查询，不用帧首快照避免竞态）
-            local freshTouches = input.numTouches
-            for i = 0, freshTouches - 1 do
-                local touch = input:GetTouch(i)
-                if touch and touch.touchID == aiming.fingerId then
-                    aimSX, aimSY = touch.position.x, touch.position.y
-                    break
+            if aimingFingerFound then
+                local freshTouches = input.numTouches
+                for i = 0, freshTouches - 1 do
+                    local touch = input:GetTouch(i)
+                    if touch and touch.touchID == aiming.fingerId then
+                        aimSX, aimSY = touch.position.x, touch.position.y
+                        break
+                    end
                 end
+            else
+                SkillSystem.confirmAiming()
+                GS.keyAimingSkill = nil
             end
-            -- 不在此处自动确认：手指抬起由 UI onPointerUp（指针捕获）负责触发 confirmAiming
         end
         if aimSX and aimSY then
             SkillSystem.updateAiming(aimSX, aimSY)
