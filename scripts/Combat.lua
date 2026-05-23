@@ -394,7 +394,6 @@ function Combat.processDeaths()
             GS.gameState = "victory"
             GS.settledGlory = TS.settleGame(true, GS.gameTime)
         end
-        end
     end
 end
 

@@ -710,7 +710,7 @@ function HandleKeyDown(eventType, eventData)
     -- 战术指令快捷键
     if GS.gameState == "playing" and GS.lords[1] and GS.lords[1].alive then
         -- ESC 取消瞄准
-        if key == KEY_ESC and GS.keyAimingSkill then
+        if key == KEY_ESCAPE and GS.keyAimingSkill then
             GS.keyAimingSkill = nil
             return
         end

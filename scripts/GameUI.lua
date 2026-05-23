@@ -56,27 +56,17 @@ end
 -- ============================================================================
 
 function M.CreateGameUI()
-    local screenW = 1280
-    local screenH = 720
-
-    local atkR = 42
-    local atkCX = screenW - 100
-    local atkCY = screenH - 110
-
     local skillR = 32
-    local skillDist = 90
-
-    local skillAngles = {
-        dash       = -math.pi / 2,
-        arrowRain  = -math.pi / 6,
-        shieldWall = math.pi + math.pi / 6,
-        bounty     = math.pi / 2,
-    }
-
+    local skillDist = 105
+    -- 容器 180×180，锚点在 (140,140)，所有技能向左/向上扩展，不超出容器边界
+    -- 容器用 right/bottom 锚定，完全不依赖屏幕分辨率
+    local atkLX = 140
+    local atkLY = 140
+    local skillAnglesDeg = { dash = 180, bounty = 150, arrowRain = 120, shieldWall = 90 }
     local function skillPos(id)
-        local a = skillAngles[id] or 0
-        return math.floor(atkCX + math.cos(a) * skillDist),
-               math.floor(atkCY + math.sin(a) * skillDist)
+        local rad = math.rad(skillAnglesDeg[id] or 90)
+        return math.floor(atkLX + math.cos(rad) * skillDist),
+               math.floor(atkLY - math.sin(rad) * skillDist)
     end
 
     local skillChildren = {}
@@ -151,16 +141,7 @@ function M.CreateGameUI()
                         },
                     },
                 },
-                UI.Label {
-                    id = "skillUnlock_" .. skillId,
-                    text = unlockInfo and unlockInfo.label or "",
-                    fontSize = 8,
-                    fontColor = {255, 100, 100, 220},
-                    textAlign = "center",
-                    position = "absolute",
-                    bottom = -14,
-                    left = 0, right = 0,
-                },
+
             },
         })
     end
@@ -256,10 +237,10 @@ function M.CreateGameUI()
             UI.Panel {
                 id = "skillPanel",
                 position = "absolute",
-                top = 0,
-                left = 0,
-                right = 0,
-                bottom = 0,
+                right = 80,
+                bottom = 80,
+                width = 180,
+                height = 180,
                 pointerEvents = "box-none",
                 children = skillChildren,
             },
@@ -268,7 +249,9 @@ function M.CreateGameUI()
                 id = "actionPanel",
                 position = "absolute",
                 bottom = 20,
-                left = 20,
+                left = 0,
+                right = 0,
+                justifyContent = "center",
                 flexDirection = "row",
                 gap = 8,
                 pointerEvents = "box-none",
@@ -571,7 +554,6 @@ function M.UpdateGameUI()
         local cdOverlay = GS.uiRoot_:FindById("skillCD_" .. skillId)
         local cdText = GS.uiRoot_:FindById("skillCDText_" .. skillId)
         local btnPanel = GS.uiRoot_:FindById("skillBtn_" .. skillId)
-        local unlockLabel = GS.uiRoot_:FindById("skillUnlock_" .. skillId)
         if cdOverlay and cdText and btnPanel then
             local unlocked = true
             if unlockStatus[skillId] ~= nil then
@@ -582,12 +564,7 @@ function M.UpdateGameUI()
                 cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 180} })
                 cdText:SetText("🔒")
                 btnPanel:SetStyle({ borderColor = {80, 80, 80, 150}, borderWidth = 2 })
-                if unlockLabel then
-                    local info = SKILL_UNLOCK[skillId]
-                    if info then unlockLabel:SetText(info.label) end
-                end
             else
-                if unlockLabel then unlockLabel:SetText("") end
                 local cd = SkillSystem.getCooldown(skillId)
                 local isActive = SkillSystem.isActive(skillId)
                 local isAimingThis = GS.skillAiming and GS.skillAiming.skillId == skillId

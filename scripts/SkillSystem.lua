@@ -605,4 +605,9 @@ function SkillSystem.getUnlockStatus()
     return result
 end
 
+-- 集火目标查询（当前未实现集火标记系统，始终返回 nil）
+function SkillSystem.getFocusFireTarget()
+    return nil, nil
+end
+
 return SkillSystem
