@@ -333,7 +333,14 @@ function FollowerAI.updateFollowerAI(f, dt)
         end
 
     elseif f.state == "attacking" then
-        if SkillSystem.isShieldWallStunned(f) and f.fType == "soldier" then
+        if f.shieldWallTargetX ~= nil then
+            local dToSW = dist(f.x, f.y, f.shieldWallTargetX, f.shieldWallTargetY)
+            if dToSW >= 10 then
+                local dx, dy = normalize(f.shieldWallTargetX - f.x, f.shieldWallTargetY - f.y)
+                f.x = f.x + dx * CONFIG.FollowerSpeed * globalSpd * dt
+                f.y = f.y + dy * CONFIG.FollowerSpeed * globalSpd * dt
+                f.angle = math.atan2(dy, dx)
+            end
             return
         end
         -- 战斗单位：冲向目标（骑士加速，弓箭手远程）

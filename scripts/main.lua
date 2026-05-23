@@ -61,6 +61,7 @@ local function initGame(mode)
 
     -- 初始化技能系统
     SkillSystem.init()
+    GS.keyAimingSkill = nil
 
     -- 创建资源
     for i = 1, CONFIG.ResourceCount do
@@ -462,6 +463,8 @@ function Start()
     SubscribeToEvent(nvg, "NanoVGRender", "HandleNanoVGRender")
     SubscribeToEvent("Update", "HandleUpdate")
     SubscribeToEvent("MouseButtonDown", "HandleMouseDown")
+    SubscribeToEvent("MouseButtonUp", "HandleMouseUp")
+    SubscribeToEvent("MouseMove", "HandleMouseMove")
     SubscribeToEvent("KeyDown", "HandleKeyDown")
 
     -- 立即显示主菜单（不等云数据）
@@ -604,6 +607,33 @@ function HandleUpdate(eventType, eventData)
         GS.joystickY = GS.joystickY / jLen
     end
 
+    -- 键盘瞄准模式：持续跟踪鼠标位置
+    if GS.keyAimingSkill then
+        local mx = input:GetMousePosition().x
+        local my = input:GetMousePosition().y
+        SkillSystem.updateAiming(mx, my)
+    end
+
+    -- 鼠标/触摸瞄准模式：跟踪输入位置
+    if GS.skillAiming then
+        local aimSX, aimSY
+        if input:GetMouseButtonDown(MOUSEB_LEFT) or input:GetMouseButtonDown(MOUSEB_RIGHT) then
+            local mpos = input:GetMousePosition()
+            aimSX, aimSY = mpos.x, mpos.y
+        elseif numTouches > 0 then
+            for i = 0, numTouches - 1 do
+                local touch = input:GetTouch(i)
+                if touch then
+                    aimSX, aimSY = touch.position.x, touch.position.y
+                    break
+                end
+            end
+        end
+        if aimSX and aimSY then
+            SkillSystem.updateAiming(aimSX, aimSY)
+        end
+    end
+
     -- 更新游戏
     updateGame(dt)
 
@@ -614,7 +644,6 @@ end
 function HandleMouseDown(eventType, eventData)
     local btn = eventData["Button"]:GetInt()
     if btn == MOUSEB_LEFT then
-        -- 小地图点击放大/缩小切换
         if GS.gameState == "playing" then
             local mx = input:GetMousePosition().x
             local my = input:GetMousePosition().y
@@ -632,6 +661,30 @@ function HandleMouseDown(eventType, eventData)
     end
 end
 
+function HandleMouseUp(eventType, eventData)
+    local btn = eventData["Button"]:GetInt()
+    if btn == MOUSEB_LEFT then
+        if GS.skillAiming then
+            SkillSystem.confirmAiming()
+            GS.keyAimingSkill = nil
+            return
+        end
+        if GS.keyAimingSkill then
+            SkillSystem.confirmAiming()
+            GS.keyAimingSkill = nil
+            return
+        end
+    end
+end
+
+function HandleMouseMove(eventType, eventData)
+    if GS.skillAiming then
+        local mx = input:GetMousePosition().x
+        local my = input:GetMousePosition().y
+        SkillSystem.updateAiming(mx, my)
+    end
+end
+
 function HandleKeyDown(eventType, eventData)
     local key = eventData["Key"]:GetInt()
     if key == KEY_R then
@@ -644,6 +697,12 @@ function HandleKeyDown(eventType, eventData)
 
     -- 战术指令快捷键
     if GS.gameState == "playing" and GS.lords[1] and GS.lords[1].alive then
+        -- ESC 取消瞄准
+        if key == KEY_ESC and GS.keyAimingSkill then
+            GS.keyAimingSkill = nil
+            return
+        end
+
         local skillKeys = {
             [KEY_1] = "dash",
             [KEY_2] = "bounty",
@@ -652,7 +711,16 @@ function HandleKeyDown(eventType, eventData)
         }
         local skillId = skillKeys[key]
         if skillId then
-            SkillSystem.activate(skillId)
+            if GS.keyAimingSkill == skillId then
+                SkillSystem.confirmAiming()
+                GS.keyAimingSkill = nil
+            else
+                local mx = input:GetMousePosition().x
+                local my = input:GetMousePosition().y
+                if SkillSystem.startAiming(skillId, mx, my) then
+                    GS.keyAimingSkill = skillId
+                end
+            end
         end
     end
 end

@@ -29,8 +29,8 @@ local SKILL_COLORS = {
     shieldWall = {180, 140, 80},
 }
 local SKILL_UNLOCK = {
-    arrowRain = { type = "archer", count = 3, label = "需3弓手" },
-    shieldWall = { type = "soldier", count = 3, label = "需3士兵" },
+    arrowRain = { type = "archer", count = 1, label = "需1弓手" },
+    shieldWall = { type = "soldier", count = 1, label = "需1士兵" },
 }
 
 -- ============================================================================
@@ -102,7 +102,19 @@ function M.CreateGameUI()
             alignItems = "center",
             cursor = "pointer",
             onClick = function()
-                SkillSystem.activate(skillId)
+                if GS.skillAiming then
+                    if GS.skillAiming.skillId == skillId then
+                        SkillSystem.cancelAiming()
+                    else
+                        local mx = input:GetMousePosition().x
+                        local my = input:GetMousePosition().y
+                        SkillSystem.startAiming(skillId, mx, my)
+                    end
+                else
+                    local mx = input:GetMousePosition().x
+                    local my = input:GetMousePosition().y
+                    SkillSystem.startAiming(skillId, mx, my)
+                end
             end,
             children = {
                 UI.Label {
@@ -578,7 +590,14 @@ function M.UpdateGameUI()
                 if unlockLabel then unlockLabel:SetText("") end
                 local cd = SkillSystem.getCooldown(skillId)
                 local isActive = SkillSystem.isActive(skillId)
-                if cd > 0 then
+                local isAimingThis = GS.skillAiming and GS.skillAiming.skillId == skillId
+                if isAimingThis then
+                    cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 0} })
+                    cdText:SetText("")
+                    local sc = SKILL_COLORS[skillId] or {200, 200, 200}
+                    local pulse = 0.6 + math.sin(GS.gameTime * 6) * 0.4
+                    btnPanel:SetStyle({ borderColor = {sc[1], sc[2], sc[3], math.floor(255 * pulse)}, borderWidth = 3 })
+                elseif cd > 0 then
                     cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 150} })
                     cdText:SetText(string.format("%.0f", math.ceil(cd)))
                     btnPanel:SetStyle({ borderColor = {100, 100, 100, 150}, borderWidth = 1 })

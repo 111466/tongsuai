@@ -1,6 +1,7 @@
 -- ============================================================================
--- SkillSystem.lua - 领主主动技能系统
+-- SkillSystem.lua - 领主主动技能系统（拖拽施法）
 -- 4个技能: dash, bounty, arrowRain, shieldWall
+-- 所有技能采用"按住拖动选择方向/位置，松开释放"模式
 -- ============================================================================
 
 local GS = require("GameState")
@@ -20,6 +21,8 @@ local SKILL_NAMES = {
     shieldWall = "盾墙",
 }
 
+local MAX_RANGE = CONFIG.AuraRadius * 2
+
 -- ============================================================================
 -- 初始化
 -- ============================================================================
@@ -28,11 +31,49 @@ function SkillSystem.init()
     GS.skillCooldowns = {}
     GS.skillStates = {}
     GS.bountyChests = {}
+    GS.skillAiming = nil
     for _, name in ipairs(SKILL_ORDER) do
         GS.skillCooldowns[name] = 0
         GS.skillStates[name] = nil
     end
-    print("[SKILL] Skill system initialized")
+    print("[SKILL] Skill system initialized (drag-cast)")
+end
+
+-- ============================================================================
+-- 内部工具
+-- ============================================================================
+
+local function getPlayerLord()
+    local l = GS.lords[1]
+    if l and l.alive and l.isPlayer then return l end
+    return nil
+end
+
+local function countFollowerType(lord, fType)
+    local count = 0
+    for _, f in ipairs(GS.followers) do
+        if f.lordId == lord.id and f.alive and f.fType == fType then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function clampToWorld(x, y)
+    return Utils.clamp(x, 20, CONFIG.MapWidth - 20),
+           Utils.clamp(y, 20, CONFIG.MapHeight - 20)
+end
+
+local function clampToLordRange(wx, wy, lordX, lordY)
+    local dx = wx - lordX
+    local dy = wy - lordY
+    local d = Utils.dist(lordX, lordY, wx, wy)
+    if d > MAX_RANGE then
+        local nx, ny = Utils.normalize(dx, dy)
+        wx = lordX + nx * MAX_RANGE
+        wy = lordY + ny * MAX_RANGE
+    end
+    return clampToWorld(wx, wy)
 end
 
 -- ============================================================================
@@ -60,65 +101,37 @@ function SkillSystem.isActive(skillId)
     return GS.skillStates[skillId] ~= nil
 end
 
-local function getPlayerLord()
-    local l = GS.lords[1]
-    if l and l.alive and l.isPlayer then return l end
-    return nil
-end
-
-local function getPlayerFollowers(lord)
-    local result = {}
-    for _, f in ipairs(GS.followers) do
-        if f.lordId == lord.id and f.alive then
-            table.insert(result, f)
-        end
-    end
-    return result
-end
-
-local function countFollowerType(lord, fType)
-    local count = 0
-    for _, f in ipairs(GS.followers) do
-        if f.lordId == lord.id and f.alive and f.fType == fType then
-            count = count + 1
-        end
-    end
-    return count
-end
-
 -- ============================================================================
--- 能否释放判断
+-- 能否释放判断（简化为 true/false）
 -- ============================================================================
 
 function SkillSystem.canActivate(skillId)
     local lord = getPlayerLord()
-    if not lord then return false, "领主不存在" end
+    if not lord then return false end
 
     if (GS.skillCooldowns[skillId] or 0) > 0 then
-        return false, "冷却中"
+        return false
     end
 
-    local cfg = CONFIG.Skills[skillId]
-    if not cfg then return false, "技能不存在" end
-
     if skillId == "bounty" then
+        local cfg = CONFIG.Skills.bounty
         local totalRes = lord.wood + lord.stone
         if totalRes < cfg.resourceCost then
-            return false, "资源不足(" .. cfg.resourceCost .. ")"
+            return false, "资源不足"
         end
     end
 
     if skillId == "arrowRain" then
         local archerCount = countFollowerType(lord, "archer")
-        if archerCount < cfg.requireArchers then
-            return false, "弓箭手不足(" .. cfg.requireArchers .. ")"
+        if archerCount < 1 then
+            return false, "弓箭手不足"
         end
     end
 
     if skillId == "shieldWall" then
         local soldierCount = countFollowerType(lord, "soldier")
-        if soldierCount < cfg.requireSoldiers then
-            return false, "士兵不足(" .. cfg.requireSoldiers .. ")"
+        if soldierCount < 1 then
+            return false, "士兵不足"
         end
     end
 
@@ -126,13 +139,48 @@ function SkillSystem.canActivate(skillId)
 end
 
 -- ============================================================================
--- 技能释放
+-- 拖拽施法状态管理
 -- ============================================================================
 
-function SkillSystem.activate(skillId, ...)
-    local ok, reason = SkillSystem.canActivate(skillId)
-    if not ok then
-        print("[SKILL] Cannot activate " .. skillId .. ": " .. reason)
+function SkillSystem.startAiming(skillId, screenX, screenY)
+    if not SkillSystem.canActivate(skillId) then
+        return false
+    end
+
+    GS.skillAiming = {
+        skillId = skillId,
+        startX = screenX,
+        startY = screenY,
+        currentX = screenX,
+        currentY = screenY,
+    }
+    return true
+end
+
+function SkillSystem.updateAiming(screenX, screenY)
+    if not GS.skillAiming then return end
+    GS.skillAiming.currentX = screenX
+    GS.skillAiming.currentY = screenY
+end
+
+function SkillSystem.cancelAiming()
+    GS.skillAiming = nil
+end
+
+function SkillSystem.confirmAiming()
+    if not GS.skillAiming then return false end
+
+    local aiming = GS.skillAiming
+    local skillId = aiming.skillId
+
+    if not SkillSystem.canActivate(skillId) then
+        GS.skillAiming = nil
+        return false
+    end
+
+    local lord = getPlayerLord()
+    if not lord then
+        GS.skillAiming = nil
         return false
     end
 
@@ -140,35 +188,79 @@ function SkillSystem.activate(skillId, ...)
     GS.skillCooldowns[skillId] = cfg.cd
 
     if skillId == "dash" then
-        SkillSystem._activateDash(cfg, ...)
+        local angle = math.atan2(aiming.currentY - aiming.startY, aiming.currentX - aiming.startX)
+        local dirX = math.cos(angle)
+        local dirY = math.sin(angle)
+        if math.abs(dirX) < 0.001 and math.abs(dirY) < 0.001 then
+            dirX = math.cos(lord.angle)
+            dirY = math.sin(lord.angle)
+        end
+        SkillSystem._activateDash(cfg, dirX, dirY)
     elseif skillId == "bounty" then
-        SkillSystem._activateBounty(cfg)
+        local wx, wy = Utils.screenToWorld(aiming.currentX, aiming.currentY)
+        local tx, ty = clampToLordRange(wx, wy, lord.x, lord.y)
+        SkillSystem._activateBounty(cfg, tx, ty)
     elseif skillId == "arrowRain" then
-        SkillSystem._activateArrowRain(cfg)
+        local wx, wy = Utils.screenToWorld(aiming.currentX, aiming.currentY)
+        local tx, ty = clampToLordRange(wx, wy, lord.x, lord.y)
+        SkillSystem._activateArrowRain(cfg, tx, ty)
     elseif skillId == "shieldWall" then
-        SkillSystem._activateShieldWall(cfg)
+        local wx, wy = Utils.screenToWorld(aiming.currentX, aiming.currentY)
+        local tx, ty = clampToLordRange(wx, wy, lord.x, lord.y)
+        local aimAngle = math.atan2(ty - lord.y, tx - lord.x)
+        SkillSystem._activateShieldWall(cfg, aimAngle)
     end
 
     print("[SKILL] Activated: " .. SKILL_NAMES[skillId])
+    GS.skillAiming = nil
+    return true
+end
+
+function SkillSystem.getAimingState()
+    return GS.skillAiming
+end
+
+function SkillSystem.activateWithTarget(skillId, targetWX, targetWY)
+    if not SkillSystem.canActivate(skillId) then
+        return false
+    end
+
+    local lord = getPlayerLord()
+    if not lord then return false end
+
+    local cfg = CONFIG.Skills[skillId]
+    local tx, ty = clampToLordRange(targetWX, targetWY, lord.x, lord.y)
+
+    GS.skillCooldowns[skillId] = cfg.cd
+
+    if skillId == "dash" then
+        local dx, dy = Utils.normalize(tx - lord.x, ty - lord.y)
+        if math.abs(dx) < 0.001 and math.abs(dy) < 0.001 then
+            dx = math.cos(lord.angle)
+            dy = math.sin(lord.angle)
+        end
+        SkillSystem._activateDash(cfg, dx, dy)
+    elseif skillId == "bounty" then
+        SkillSystem._activateBounty(cfg, tx, ty)
+    elseif skillId == "arrowRain" then
+        SkillSystem._activateArrowRain(cfg, tx, ty)
+    elseif skillId == "shieldWall" then
+        local aimAngle = math.atan2(ty - lord.y, tx - lord.x)
+        SkillSystem._activateShieldWall(cfg, aimAngle)
+    end
+
+    print("[SKILL] Activated: " .. SKILL_NAMES[skillId] .. " at " .. math.floor(tx) .. "," .. math.floor(ty))
     return true
 end
 
 -- ============================================================================
--- 技能1: 领主冲锋 (dash)
--- 快速位移200px，到达点击溃敌人，随从加速2s
+-- 技能1: 冲锋 (dash)
+-- 拖拽方向 = 位移方向，距离 440px
 -- ============================================================================
 
-function SkillSystem._activateDash(cfg)
+function SkillSystem._activateDash(cfg, dirX, dirY)
     local lord = getPlayerLord()
     if not lord then return end
-
-    local dirX, dirY
-    if math.abs(GS.joystickX) > 0.1 or math.abs(GS.joystickY) > 0.1 then
-        dirX, dirY = Utils.normalize(GS.joystickX, GS.joystickY)
-    else
-        dirX = math.cos(lord.angle)
-        dirY = math.sin(lord.angle)
-    end
 
     local startX, startY = lord.x, lord.y
     local endX = Utils.clamp(lord.x + dirX * cfg.dist, 20, CONFIG.MapWidth - 20)
@@ -180,7 +272,10 @@ function SkillSystem._activateDash(cfg)
         timer = 0,
         duration = cfg.duration,
         knockbackDone = false,
+        knockbackDist = cfg.knockback,
+        interruptRadius = cfg.interruptRadius,
         followerSpeedTimer = cfg.followerSpeedDur,
+        followerSpeedMul = cfg.followerSpeedMul,
     }
 
     Entities.spawnParticle(lord.x, lord.y, 80, 160, 255, 8)
@@ -192,7 +287,6 @@ local function _updateDash(dt)
     local lord = getPlayerLord()
     if not lord then GS.skillStates.dash = nil return end
 
-    local cfg = CONFIG.Skills.dash
     state.timer = state.timer + dt
 
     if state.timer < state.duration then
@@ -210,10 +304,10 @@ local function _updateDash(dt)
             for _, f in ipairs(GS.followers) do
                 if f.alive and f.factionId ~= lord.faction then
                     local d = Utils.dist(lord.x, lord.y, f.x, f.y)
-                    if d < cfg.interruptRadius then
+                    if d < state.interruptRadius then
                         local dx, dy = Utils.normalize(f.x - lord.x, f.y - lord.y)
-                        f.x = f.x + dx * cfg.knockback
-                        f.y = f.y + dy * cfg.knockback
+                        f.x = f.x + dx * state.knockbackDist
+                        f.y = f.y + dy * state.knockbackDist
                         f.x = Utils.clamp(f.x, 10, CONFIG.MapWidth - 10)
                         f.y = Utils.clamp(f.y, 10, CONFIG.MapHeight - 10)
                         f.state = "following"
@@ -232,11 +326,11 @@ local function _updateDash(dt)
 end
 
 -- ============================================================================
--- 技能2: 重金悬赏 (bounty)
--- 消耗50资源，放出金箱诱惑敌方平民/士兵
+-- 技能2: 悬赏 (bounty)
+-- 拖拽到目标位置放置金箱
 -- ============================================================================
 
-function SkillSystem._activateBounty(cfg)
+function SkillSystem._activateBounty(cfg, targetX, targetY)
     local lord = getPlayerLord()
     if not lord then return end
 
@@ -248,14 +342,9 @@ function SkillSystem._activateBounty(cfg)
         lord.stone = lord.stone - remaining
     end
 
-    local frontX = lord.x + math.cos(lord.angle) * 120
-    local frontY = lord.y + math.sin(lord.angle) * 120
-    frontX = Utils.clamp(frontX, 20, CONFIG.MapWidth - 20)
-    frontY = Utils.clamp(frontY, 20, CONFIG.MapHeight - 20)
-
     local chest = {
         id = GS.newId(),
-        x = frontX, y = frontY,
+        x = targetX, y = targetY,
         lifetime = cfg.lifetime,
         lureRadius = cfg.lureRadius,
         stunDur = cfg.stunDur,
@@ -264,8 +353,8 @@ function SkillSystem._activateBounty(cfg)
     }
     table.insert(GS.bountyChests, chest)
 
-    Entities.spawnParticle(frontX, frontY, 255, 215, 0, 12)
-    print("[SKILL] Bounty chest placed at " .. math.floor(frontX) .. "," .. math.floor(frontY))
+    Entities.spawnParticle(targetX, targetY, 255, 215, 0, 12)
+    print("[SKILL] Bounty chest placed at " .. math.floor(targetX) .. "," .. math.floor(targetY))
 end
 
 local function _updateBountyChests(dt)
@@ -286,33 +375,41 @@ end
 
 -- ============================================================================
 -- 技能3: 箭雨 (arrowRain)
--- 解锁条件：3个弓箭手
--- 在领主前方200px处降下箭雨，范围半径80px，3波AOE伤害
+-- 拖拽到目标位置降下箭雨
 -- ============================================================================
 
-function SkillSystem._activateArrowRain(cfg)
+function SkillSystem._activateArrowRain(cfg, targetX, targetY)
     local lord = getPlayerLord()
     if not lord then return end
 
-    local targetX = lord.x + math.cos(lord.angle) * cfg.range
-    local targetY = lord.y + math.sin(lord.angle) * cfg.range
+    local archerCount = countFollowerType(lord, "archer")
+    local level = math.max(1, archerCount)
+    local radius = cfg.baseRadius + (level - 1) * cfg.radiusPerLevel
+    local waves = cfg.baseWaves + (level - 1) * cfg.wavesPerLevel
+    local damage = cfg.baseDamage + archerCount * cfg.damagePerArcher
+
+    if not targetX or not targetY then
+        targetX = lord.x + math.cos(lord.angle) * 200
+        targetY = lord.y + math.sin(lord.angle) * 200
+    end
     targetX = Utils.clamp(targetX, 20, CONFIG.MapWidth - 20)
     targetY = Utils.clamp(targetY, 20, CONFIG.MapHeight - 20)
 
     GS.skillStates.arrowRain = {
         x = targetX,
         y = targetY,
-        radius = cfg.radius,
-        waves = cfg.waves,
+        radius = radius,
+        waves = waves,
         waveInterval = cfg.waveInterval,
         timer = 0,
         wavesDone = 0,
-        damage = cfg.damage,
+        damage = damage,
         ownerFaction = lord.faction,
     }
 
     Entities.spawnParticle(targetX, targetY, 240, 200, 50, 10)
-    print("[SKILL] Arrow Rain at " .. math.floor(targetX) .. "," .. math.floor(targetY))
+    print("[SKILL] Arrow Rain at " .. math.floor(targetX) .. "," .. math.floor(targetY)
+        .. " radius=" .. radius .. " waves=" .. waves .. " dmg=" .. damage)
 end
 
 local function _updateArrowRain(dt)
@@ -361,21 +458,50 @@ end
 
 -- ============================================================================
 -- 技能4: 盾墙 (shieldWall)
--- 解锁条件：3个士兵
--- 所有士兵举盾3秒，受到伤害-50%，无法移动
+-- 拖拽到目标位置，士兵列阵
 -- ============================================================================
 
-function SkillSystem._activateShieldWall(cfg)
+function SkillSystem._activateShieldWall(cfg, aimAngle)
     local lord = getPlayerLord()
     if not lord then return end
 
+    local soldiers = {}
+    for _, f in ipairs(GS.followers) do
+        if f.lordId == lord.id and f.alive and f.fType == "soldier" then
+            table.insert(soldiers, f)
+        end
+    end
+
+    local soldierCount = #soldiers
+    local duration = cfg.baseDuration + (soldierCount - 1) * cfg.durationPerLevel
+
+    local angle = aimAngle or lord.angle
+    local perpAngle = angle + math.pi / 2
+    local rowSize = cfg.rowSize
+    local spacing = cfg.spacing
+
+    local centerX = lord.x + math.cos(angle) * 40
+    local centerY = lord.y + math.sin(angle) * 40
+
+    for i, f in ipairs(soldiers) do
+        local rowIdx = (i - 1) % rowSize
+        local rowCount = math.min(rowSize, soldierCount - ((i - 1) // rowSize) * rowSize)
+        local offset = (rowIdx - (rowCount - 1) / 2) * spacing
+        local rowOffset = ((i - 1) // rowSize) * spacing
+
+        f.shieldWallTargetX = centerX + math.cos(perpAngle) * offset + math.cos(angle) * (-rowOffset)
+        f.shieldWallTargetY = centerY + math.sin(perpAngle) * offset + math.sin(angle) * (-rowOffset)
+        f.shieldWallTargetX = Utils.clamp(f.shieldWallTargetX, 10, CONFIG.MapWidth - 10)
+        f.shieldWallTargetY = Utils.clamp(f.shieldWallTargetY, 10, CONFIG.MapHeight - 10)
+    end
+
     GS.skillStates.shieldWall = {
-        timer = cfg.duration,
+        timer = duration,
         factionId = lord.faction,
     }
 
     Entities.spawnParticle(lord.x, lord.y, 220, 80, 80, 12)
-    print("[SKILL] Shield Wall activated")
+    print("[SKILL] Shield Wall activated duration=" .. duration .. " soldiers=" .. soldierCount)
 end
 
 local function _updateShieldWall(dt)
@@ -384,6 +510,12 @@ local function _updateShieldWall(dt)
 
     state.timer = state.timer - dt
     if state.timer <= 0 then
+        for _, f in ipairs(GS.followers) do
+            if f.alive and f.fType == "soldier" and f.factionId == state.factionId then
+                f.shieldWallTargetX = nil
+                f.shieldWallTargetY = nil
+            end
+        end
         GS.skillStates.shieldWall = nil
         print("[SKILL] Shield Wall ended")
     end
@@ -418,7 +550,7 @@ end
 function SkillSystem.getDashSpeedMul()
     local state = GS.skillStates.dash
     if state and state.followerSpeedTimer > 0 then
-        return CONFIG.Skills.dash.followerSpeedMul
+        return state.followerSpeedMul
     end
     return 1.0
 end
@@ -451,10 +583,7 @@ function SkillSystem.isShieldWallActive(factionId)
 end
 
 function SkillSystem.isShieldWallStunned(follower)
-    if not SkillSystem.isShieldWallActive(follower.factionId) then
-        return false
-    end
-    return follower.fType == "soldier"
+    return follower.shieldWallTargetX ~= nil
 end
 
 function SkillSystem.getUnlockStatus()
@@ -465,9 +594,9 @@ function SkillSystem.getUnlockStatus()
         if not cfg then
             result[name] = false
         elseif name == "arrowRain" then
-            result[name] = lord and countFollowerType(lord, "archer") >= cfg.requireArchers
+            result[name] = lord and countFollowerType(lord, "archer") >= 1
         elseif name == "shieldWall" then
-            result[name] = lord and countFollowerType(lord, "soldier") >= cfg.requireSoldiers
+            result[name] = lord and countFollowerType(lord, "soldier") >= 1
         else
             result[name] = true
         end

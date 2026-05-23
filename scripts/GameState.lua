@@ -72,6 +72,8 @@ local GS = {
     skillCooldowns = {},        -- skillName -> remainingCD
     skillStates = {},           -- 技能激活状态
     bountyChests = {},          -- 悬赏金箱数组
+    skillAiming = nil,          -- 当前鼠标瞄准状态
+    keyAimingSkill = nil,       -- 当前键盘瞄准的技能ID
 
     -- UI引用
     uiRoot_ = nil,

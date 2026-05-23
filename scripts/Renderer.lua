@@ -2219,7 +2219,7 @@ function M.drawSkillEffects(w, h)
     if arrowRainState then
         local arSX, arSY = Utils.worldToScreen(arrowRainState.x, arrowRainState.y)
         local cfg = CONFIG.Skills.arrowRain
-        local arRadius = cfg.radius
+        local arRadius = arrowRainState.radius
         local progress = arrowRainState.timer / arrowRainState.maxTimer
         local pulse = 0.8 + math.sin(GS.gameTime * 6) * 0.2
 
@@ -2266,6 +2266,215 @@ function M.drawSkillEffects(w, h)
             nvgCircle(ctx, dSX, dSY, 40)
             nvgFillColor(ctx, nvgRGBA(80, 160, 255, dAlpha))
             nvgFill(ctx)
+        end
+    end
+
+    -- 7) 瞄准模式指示器
+    local aiming = GS.skillAiming
+    if aiming then
+        local lord = GS.lords[1]
+        if lord and lord.alive then
+            local lordSX, lordSY = Utils.worldToScreen(lord.x, lord.y)
+            local targetWX, targetWY = Utils.screenToWorld(aiming.currentX, aiming.currentY)
+            local targetSX, targetSY = aiming.currentX, aiming.currentY
+            local distToTarget = Utils.dist(lord.x, lord.y, targetWX, targetWY)
+            local outOfRange = distToTarget > 440
+            local skillId = aiming.skillId
+
+            -- 范围限制圈（超出440px时显示）
+            if outOfRange then
+                local dashLen = 8
+                local circumf = 2 * math.pi * 440
+                local numDashes = math.floor(circumf / (dashLen * 2))
+                nvgBeginPath(ctx)
+                for i = 0, numDashes - 1 do
+                    local a1 = (i / numDashes) * math.pi * 2
+                    local a2 = ((i + 0.5) / numDashes) * math.pi * 2
+                    nvgMoveTo(ctx, lordSX + math.cos(a1) * 440, lordSY + math.sin(a1) * 440)
+                    nvgLineTo(ctx, lordSX + math.cos(a2) * 440, lordSY + math.sin(a2) * 440)
+                end
+                nvgStrokeColor(ctx, nvgRGBA(255, 100, 100, 120))
+                nvgStrokeWidth(ctx, 1.5)
+                nvgStroke(ctx)
+            end
+
+            if skillId == "dash" then
+                -- 冲锋瞄准：箭头线 + 击退范围圆
+                nvgBeginPath(ctx)
+                nvgMoveTo(ctx, lordSX, lordSY)
+                nvgLineTo(ctx, targetSX, targetSY)
+                nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, 160))
+                nvgStrokeWidth(ctx, 3)
+                nvgStroke(ctx)
+                local angle = math.atan2(targetSY - lordSY, targetSX - lordSX)
+                local arrowSize = 12
+                nvgBeginPath(ctx)
+                nvgMoveTo(ctx, targetSX, targetSY)
+                nvgLineTo(ctx, targetSX - math.cos(angle - 0.4) * arrowSize, targetSY - math.sin(angle - 0.4) * arrowSize)
+                nvgMoveTo(ctx, targetSX, targetSY)
+                nvgLineTo(ctx, targetSX - math.cos(angle + 0.4) * arrowSize, targetSY - math.sin(angle + 0.4) * arrowSize)
+                nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, 200))
+                nvgStrokeWidth(ctx, 3)
+                nvgStroke(ctx)
+                local knockR = 50
+                nvgBeginPath(ctx)
+                nvgCircle(ctx, targetSX, targetSY, knockR)
+                nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, 80))
+                nvgStrokeWidth(ctx, 1.5)
+                nvgStroke(ctx)
+                nvgFillColor(ctx, nvgRGBA(80, 160, 255, 20))
+                nvgFill(ctx)
+
+            elseif skillId == "bounty" then
+                -- 悬赏瞄准：虚线 + 金色圆圈
+                local dashSegLen = 10
+                local totalDist = Utils.dist(lordSX, lordSY, targetSX, targetSY)
+                if totalDist > 1 then
+                    local ndx = (targetSX - lordSX) / totalDist
+                    local ndy = (targetSY - lordSY) / totalDist
+                    nvgBeginPath(ctx)
+                    local drawn = 0
+                    local on = true
+                    while drawn < totalDist do
+                        local segLen = math.min(dashSegLen, totalDist - drawn)
+                        local sx1 = lordSX + ndx * drawn
+                        local sy1 = lordSY + ndy * drawn
+                        local sx2 = lordSX + ndx * (drawn + segLen)
+                        local sy2 = lordSY + ndy * (drawn + segLen)
+                        if on then
+                            nvgMoveTo(ctx, sx1, sy1)
+                            nvgLineTo(ctx, sx2, sy2)
+                        end
+                        drawn = drawn + segLen
+                        on = not on
+                    end
+                    nvgStrokeColor(ctx, nvgRGBA(255, 200, 0, 140))
+                    nvgStrokeWidth(ctx, 2)
+                    nvgStroke(ctx)
+                end
+                local bountyR = 60
+                nvgBeginPath(ctx)
+                nvgCircle(ctx, targetSX, targetSY, bountyR)
+                nvgStrokeColor(ctx, nvgRGBA(255, 200, 0, 160))
+                nvgStrokeWidth(ctx, 2)
+                nvgStroke(ctx)
+                nvgFillColor(ctx, nvgRGBA(255, 200, 0, 25))
+                nvgFill(ctx)
+
+            elseif skillId == "arrowRain" then
+                -- 箭雨瞄准：虚线 + 蓝色多圈
+                local dashSegLen = 10
+                local totalDist = Utils.dist(lordSX, lordSY, targetSX, targetSY)
+                if totalDist > 1 then
+                    local ndx = (targetSX - lordSX) / totalDist
+                    local ndy = (targetSY - lordSY) / totalDist
+                    nvgBeginPath(ctx)
+                    local drawn = 0
+                    local on = true
+                    while drawn < totalDist do
+                        local segLen = math.min(dashSegLen, totalDist - drawn)
+                        local sx1 = lordSX + ndx * drawn
+                        local sy1 = lordSY + ndy * drawn
+                        local sx2 = lordSX + ndx * (drawn + segLen)
+                        local sy2 = lordSY + ndy * (drawn + segLen)
+                        if on then
+                            nvgMoveTo(ctx, sx1, sy1)
+                            nvgLineTo(ctx, sx2, sy2)
+                        end
+                        drawn = drawn + segLen
+                        on = not on
+                    end
+                    nvgStrokeColor(ctx, nvgRGBA(100, 200, 255, 140))
+                    nvgStrokeWidth(ctx, 2)
+                    nvgStroke(ctx)
+                end
+                local arCfg = CONFIG.Skills.arrowRain
+                local lord2 = GS.lords[1]
+                local archerCount = 0
+                for _, f in ipairs(GS.followers) do
+                    if f.lordId == lord2.id and f.alive and f.fType == "archer" then
+                        archerCount = archerCount + 1
+                    end
+                end
+                local arLevel = math.max(1, archerCount)
+                local arR = arCfg.baseRadius + (arLevel - 1) * arCfg.radiusPerLevel
+                local pulse = 0.9 + math.sin(GS.gameTime * 4) * 0.1
+                for ring = 1, 3 do
+                    local ringR = arR * pulse * (ring / 3)
+                    nvgBeginPath(ctx)
+                    nvgCircle(ctx, targetSX, targetSY, ringR)
+                    nvgStrokeColor(ctx, nvgRGBA(100, 200, 255, math.floor(160 / ring)))
+                    nvgStrokeWidth(ctx, 1.5)
+                    nvgStroke(ctx)
+                end
+                nvgBeginPath(ctx)
+                nvgCircle(ctx, targetSX, targetSY, arR * pulse)
+                nvgFillColor(ctx, nvgRGBA(100, 200, 255, 20))
+                nvgFill(ctx)
+
+            elseif skillId == "shieldWall" then
+                -- 盾墙瞄准：虚线 + 士兵列阵预览
+                local dashSegLen = 10
+                local totalDist = Utils.dist(lordSX, lordSY, targetSX, targetSY)
+                if totalDist > 1 then
+                    local ndx = (targetSX - lordSX) / totalDist
+                    local ndy = (targetSY - lordSY) / totalDist
+                    nvgBeginPath(ctx)
+                    local drawn = 0
+                    local on = true
+                    while drawn < totalDist do
+                        local segLen = math.min(dashSegLen, totalDist - drawn)
+                        local sx1 = lordSX + ndx * drawn
+                        local sy1 = lordSY + ndy * drawn
+                        local sx2 = lordSX + ndx * (drawn + segLen)
+                        local sy2 = lordSY + ndy * (drawn + segLen)
+                        if on then
+                            nvgMoveTo(ctx, sx1, sy1)
+                            nvgLineTo(ctx, sx2, sy2)
+                        end
+                        drawn = drawn + segLen
+                        on = not on
+                    end
+                    nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, 140))
+                    nvgStrokeWidth(ctx, 2)
+                    nvgStroke(ctx)
+                end
+                local aimAngle = math.atan2(targetWY - lord.y, targetWX - lord.x)
+                local perpAngle = aimAngle + math.pi / 2
+                local swCfg = CONFIG.Skills.shieldWall
+                local rowSize = swCfg.rowSize
+                local spacing = swCfg.spacing
+                local centerX = targetWX
+                local centerY = targetWY
+                local soldierCount = 0
+                for _, f in ipairs(GS.followers) do
+                    if f.lordId == lord.id and f.alive and f.fType == "soldier" then
+                        soldierCount = soldierCount + 1
+                    end
+                end
+                local previewCount = math.min(soldierCount, rowSize)
+                for i = 1, previewCount do
+                    local offset = (i - 1 - (previewCount - 1) / 2) * spacing
+                    local bx = centerX + math.cos(perpAngle) * offset
+                    local by = centerY + math.sin(perpAngle) * offset
+                    local bsx, bsy = Utils.worldToScreen(bx, by)
+                    nvgBeginPath(ctx)
+                    nvgRect(ctx, bsx - 4, bsy - 4, 8, 8)
+                    nvgFillColor(ctx, nvgRGBA(80, 160, 255, 80))
+                    nvgFill(ctx)
+                    nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, 140))
+                    nvgStrokeWidth(ctx, 1)
+                    nvgStroke(ctx)
+                end
+            end
+
+            -- 瞄准模式提示文字
+            nvgFontFace(ctx, "sans")
+            nvgFontSize(ctx, 14)
+            nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
+            local hintAlpha = 180 + math.floor(math.sin(GS.gameTime * 4) * 75)
+            nvgFillColor(ctx, nvgRGBA(255, 255, 255, hintAlpha))
+            nvgText(ctx, w / 2, h - 60, "点击释放 | ESC取消", nil)
         end
     end
 end
