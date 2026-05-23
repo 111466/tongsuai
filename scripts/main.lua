@@ -267,9 +267,9 @@ local function updateGame(dt)
             -- 通知 Renderer 触发攻击动画（Renderer.updateLordAnims 消费此标记）
             GS.playerAttackAnimTrigger = true
 
-            -- 对范围内敌方造成伤害（近战扇形，半径 80，伤害 30）
+            -- 对范围内敌方造成伤害（近战扇形，半径 80，伤害 25）
             local ATK_RANGE = 80
-            local ATK_DMG   = 30
+            local ATK_DMG   = 25
             local hitCount = 0
 
             -- 攻击敌方随从

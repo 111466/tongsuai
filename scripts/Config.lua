@@ -8,10 +8,10 @@ local CONFIG = {
     MapHeight = 3000,   -- 世界高度 (像素)
     AuraRadius = 220,   -- 领主光环半径
     LordSpeed  = 180,   -- 领主移动速度
-    LordHP     = 100,   -- 领主初始血量
+    LordHP     = 150,   -- 领主初始血量
 
     FollowerSpeed = 160, -- 随从移动速度
-    PeasantGatherTime = 1.2, -- 平民采集时间(秒)
+    PeasantGatherTime = 1.8, -- 平民采集时间(秒)
     PeasantCost = 10,   -- 平民造价(木材)
     SoldierCost = 20,   -- 士兵造价(木材，需要1平民转化)
     TreeWood    = 15,   -- 每棵树产出
@@ -51,14 +51,14 @@ local CONFIG = {
     ArcherCostWood  = 10,       -- 弓箭手升级成本（木头）
 
     ArcherRange = 440,          -- 弓箭手射程（像素，= 领主光环半径 × 2）
-    ArcherFireInterval = 1.5,   -- 弓箭手射击间隔（秒）
-    ArcherFleeDistance = 40,    -- 被贴近到此距离时逃跑
+    ArcherFireInterval = 1.2,   -- 弓箭手射击间隔（秒）
+    ArcherFleeDistance = 80,    -- 被贴近到此距离时逃跑
 
     -- 治愈师招募成本
-    HealerCost         = { wood = 20, stone = 20 },
-    HealerRange        = 80,   -- 治愈师治疗范围
-    HealerHealAmount   = 15,   -- 每次治疗量
-    HealerInterval     = 2.5,  -- 治疗间隔（秒）
+    HealerCost         = { wood = 15, stone = 15 },
+    HealerRange        = 120,   -- 治愈师治疗范围
+    HealerHealAmount   = 25,   -- 每次治疗量
+    HealerInterval     = 2.0,  -- 治疗间隔（秒）
 
     -- 据点系统
     StrongholdHP = 300,             -- 据点生命值
@@ -125,10 +125,10 @@ local CONFIG = {
 
     -- ========== 数值制战斗系统 ==========
     UnitStats = {
-        peasant  = { hp = 20,  atk = 5,  atkInterval = 1.0 },
-        soldier  = { hp = 60,  atk = 25, atkInterval = 0.8 },
-        archer   = { hp = 40,  atk = 20, atkInterval = 1.5 },
-        healer   = { hp = 30,  atk = 0,  atkInterval = 99  },  -- 不攻击，由 AI 主动治疗
+        peasant  = { hp = 30,  atk = 5,  atkInterval = 1.0 },
+        soldier  = { hp = 60,  atk = 20, atkInterval = 0.8 },
+        archer   = { hp = 50,  atk = 20, atkInterval = 1.2 },
+        healer   = { hp = 45,  atk = 0,  atkInterval = 99  },
     },
     DamageMultiplierDisabled = true,
     LordModes = {
