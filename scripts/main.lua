@@ -553,18 +553,14 @@ function HandleUpdate(eventType, eventData)
     local numTouches = input.numTouches
     local touchOnAtkBtn = false
     local joystickTouched = false
-    local aimingFingerFound = false
+    local anyTouchOnScreen = false
 
     for i = 0, numTouches - 1 do
         local touch = input:GetTouch(i)
         if touch then
+            anyTouchOnScreen = true
             local tx = touch.position.x
             local ty = touch.position.y
-
-            if GS.skillAiming and touch.touchID == GS.skillAiming.fingerId then
-                aimingFingerFound = true
-                goto touchContinue
-            end
 
             local distToBtn = math.sqrt((tx - atkBtnX)^2 + (ty - atkBtnY)^2)
             if distToBtn <= atkBtnR * 1.3 then
@@ -591,7 +587,6 @@ function HandleUpdate(eventType, eventData)
                 GS.joystickY = dy / maxDist
             end
         end
-        ::touchContinue::
     end
 
     -- 更新攻击按钮视觉状态
@@ -618,30 +613,41 @@ function HandleUpdate(eventType, eventData)
 
     -- 鼠标/触摸瞄准模式：跟踪输入位置
     if GS.skillAiming then
-        local aimSX, aimSY
         local aiming = GS.skillAiming
-        if aiming.fingerId == nil then
+        local aimElapsed = (os.clock() - aiming.aimStartTime) * 1000
+
+        if aiming.pendingConfirm and aimElapsed >= 80 then
+            SkillSystem.confirmAiming()
+            GS.keyAimingSkill = nil
+        elseif aiming.fingerId == nil then
             if input:GetMouseButtonDown(MOUSEB_LEFT) then
                 local mpos = input:GetMousePosition()
-                aimSX, aimSY = mpos.x, mpos.y
+                SkillSystem.updateAiming(mpos.x, mpos.y)
             end
         else
-            if aimingFingerFound then
-                local freshTouches = input.numTouches
-                for i = 0, freshTouches - 1 do
+            if numTouches > 0 then
+                local bestDist = math.huge
+                local bestTX, bestTY
+                for i = 0, numTouches - 1 do
                     local touch = input:GetTouch(i)
-                    if touch and touch.touchID == aiming.fingerId then
-                        aimSX, aimSY = touch.position.x, touch.position.y
-                        break
+                    if touch then
+                        local dx = touch.position.x - aiming.startX
+                        local dy = touch.position.y - aiming.startY
+                        local d = math.sqrt(dx * dx + dy * dy)
+                        if d < bestDist then
+                            bestDist = d
+                            bestTX = touch.position.x
+                            bestTY = touch.position.y
+                        end
                     end
                 end
-            else
+                if bestTX and bestTY then
+                    SkillSystem.updateAiming(bestTX, bestTY)
+                end
+            elseif aimElapsed > 100 then
                 SkillSystem.confirmAiming()
                 GS.keyAimingSkill = nil
             end
-        end
-        if aimSX and aimSY then
-            SkillSystem.updateAiming(aimSX, aimSY)
         end
     end
 

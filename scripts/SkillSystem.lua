@@ -154,7 +154,7 @@ function SkillSystem.startAiming(skillId, screenX, screenY, fingerId)
         currentX = screenX,
         currentY = screenY,
         aimStartTime = os.clock(),
-        fingerId = fingerId,  -- 触摸手指ID，nil表示鼠标
+        fingerId = fingerId,
     }
     return true
 end
@@ -169,8 +169,15 @@ function SkillSystem.cancelAiming()
     GS.skillAiming = nil
 end
 
-function SkillSystem.confirmAiming()
+function SkillSystem.canConfirmAiming()
     if not GS.skillAiming then return false end
+    local aimElapsed = (os.clock() - GS.skillAiming.aimStartTime) * 1000
+    if aimElapsed < 80 then return false end
+    return true
+end
+
+function SkillSystem.confirmAiming()
+    if not SkillSystem.canConfirmAiming() then return false end
 
     local aiming = GS.skillAiming
     local skillId = aiming.skillId
