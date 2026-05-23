@@ -3,8 +3,6 @@
 local UI = require("urhox-libs/UI")
 local GS = require("GameState")
 local TS = require("TalentSystem")
-local CampaignState = require("CampaignState")
-local EndlessMode = require("EndlessMode")
 local Renderer = require("Renderer")
 local T = require("MenuTheme")
 
@@ -112,15 +110,9 @@ local function getModeInfo(mode)
     if mode == "skirmish" then
         return "最高排名: ---", "最高击杀: ---", "4名领主混战，最后存活者胜"
     elseif mode == "campaign" then
-        local ch = CampaignState.getCurrentChapter()
-        local cleared = CampaignState.getClearedLevels()
-        local n = cleared and #cleared or 0
-        return "进度: 第" .. ch .. "章", "已通关: " .. n .. "/17", "挑战精心设计的关卡"
+        return "进度: 即将开放", "", "挑战精心设计的关卡"
     elseif mode == "endless" then
-        local info = EndlessMode.getWaveInfo()
-        local best = info and info.bestWave or 0
-        local coins = info and info.warCoins or 0
-        return "最高波次: " .. best, "战争币: " .. coins, "抵御无尽敌潮，能撑多久？"
+        return "最高波次: 即将开放", "", "抵御无尽敌潮，能撑多久？"
     end
     return "", "", ""
 end

@@ -22,8 +22,6 @@ local Combat = require("Combat")
 local Renderer = require("Renderer")
 local GameUI = require("GameUI")
 local SkillSystem = require("SkillSystem")
-local CampaignData = require("CampaignData")
-local ShopSystem = require("ShopSystem")
 local GiantBeastSystem = require("GiantBeastSystem")
 
 -- UI 菜单模块

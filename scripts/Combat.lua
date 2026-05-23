@@ -9,8 +9,6 @@ local Utils = require("Utils")
 local Entities = require("Entities")
 local TS = require("TalentSystem")
 local SkillSystem = require("SkillSystem")
-local ShopSystem = require("ShopSystem")
-local CampaignState = require("CampaignState")
 local CodexState = require("CodexState")
 
 local Combat = {}
@@ -31,20 +29,11 @@ local function calcUnitDamage(attackerType, defenderType, attackerLordId)
         dmg = dmg * talentEffects.critDamageMul
     end
 
-    -- 无尽模式攻击 buff
-    if GS.gameMode == "endless" then
-        dmg = dmg * ShopSystem.getEndlessAtkMul()
-    end
-
     return math.floor(dmg)
 end
 
 -- 护甲减伤
 local function applyArmor(dmg, defenderUnit)
-    -- 无尽模式护甲 buff
-    if GS.gameMode == "endless" then
-        dmg = math.floor(dmg * ShopSystem.getEndlessArmorMul())
-    end
     return dmg
 end
 
@@ -448,24 +437,7 @@ function Combat.processDeaths()
         if allEnemiesEliminated then
             GS.gameState = "victory"
             GS.settledGlory = TS.settleGame(true, GS.gameTime)
-
-            -- 战役模式：记录通关进度
-            if GS.gameMode == "campaign" and GS.selectedLevelId then
-                -- 计算玩家损失的随从数
-                local casualties = 0
-                for _, f in ipairs(GS.followers) do
-                    if f.factionId == 1 and not f.alive then
-                        casualties = casualties + 1
-                    end
-                end
-                local reward = CampaignState.clearLevel(GS.selectedLevelId, casualties)
-                if reward then
-                    GS.campaignReward = reward
-                    print("[CAMPAIGN] Level " .. GS.selectedLevelId .. " cleared! Reward: " .. reward.type .. "=" .. reward.id)
-                else
-                    print("[CAMPAIGN] Level " .. GS.selectedLevelId .. " cleared (no new reward)")
-                end
-            end
+        end
         end
     end
 end
