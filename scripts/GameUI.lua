@@ -56,20 +56,50 @@ end
 -- ============================================================================
 
 function M.CreateGameUI()
+    local atkR = 44
     local skillR = 32
-    local skillDist = 105
-    -- 容器 180×180，锚点在 (140,140)，所有技能向左/向上扩展，不超出容器边界
-    -- 容器用 right/bottom 锚定，完全不依赖屏幕分辨率
-    local atkLX = 140
-    local atkLY = 140
-    local skillAnglesDeg = { dash = 180, bounty = 150, arrowRain = 120, shieldWall = 90 }
+    local skillDist = 90
+    local containerW = 260
+    local containerH = 260
+    local atkCX = math.floor(containerW / 2)
+    local atkCY = math.floor(containerH / 2)
+
+    local skillAnglesDeg = { dash = 180, bounty = 270, arrowRain = 90, shieldWall = 0 }
     local function skillPos(id)
         local rad = math.rad(skillAnglesDeg[id] or 90)
-        return math.floor(atkLX + math.cos(rad) * skillDist),
-               math.floor(atkLY - math.sin(rad) * skillDist)
+        return math.floor(atkCX + math.cos(rad) * skillDist),
+               math.floor(atkCY - math.sin(rad) * skillDist)
     end
 
     local skillChildren = {}
+
+    table.insert(skillChildren, UI.Panel {
+        id = "atkBtn",
+        position = "absolute",
+        left = atkCX - atkR,
+        top = atkCY - atkR,
+        width = atkR * 2,
+        height = atkR * 2,
+        backgroundColor = {200, 50, 50, 80},
+        borderRadius = atkR,
+        borderWidth = 2.5,
+        borderColor = {255, 120, 120, 140},
+        justifyContent = "center",
+        alignItems = "center",
+        cursor = "pointer",
+        onClick = function()
+            GS.attackBtnTriggered = true
+        end,
+        children = {
+            UI.Label {
+                text = "⚔",
+                fontSize = 24,
+                fontColor = {255, 255, 255, 255},
+                textAlign = "center",
+            },
+        },
+    })
+
     local skillOrder = SkillSystem.getSkillOrder()
     for idx, skillId in ipairs(skillOrder) do
         local sc = SKILL_COLORS[skillId] or {200, 200, 200}
@@ -237,10 +267,10 @@ function M.CreateGameUI()
             UI.Panel {
                 id = "skillPanel",
                 position = "absolute",
-                right = 80,
-                bottom = 80,
-                width = 180,
-                height = 180,
+                right = 10,
+                bottom = 10,
+                width = containerW,
+                height = containerH,
                 pointerEvents = "box-none",
                 children = skillChildren,
             },

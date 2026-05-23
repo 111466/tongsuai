@@ -547,9 +547,8 @@ function HandleUpdate(eventType, eventData)
     -- 触摸输入（虚拟摇杆 + 攻击按钮）
     -- 攻击按钮热区（右下角，与绘制保持一致）
     local atkBtnR = 44
-    local atkBtnMargin = 30
-    local atkBtnX = GS.screenW - atkBtnMargin - atkBtnR
-    local atkBtnY = GS.screenH - atkBtnMargin - atkBtnR
+    local atkBtnX = GS.screenW - 10 - 130
+    local atkBtnY = GS.screenH - 10 - 130
 
     local numTouches = input.numTouches
     local touchOnAtkBtn = false
@@ -817,12 +816,6 @@ function HandleNanoVGRender(eventType, eventData)
         -- 虚拟摇杆绘制
         Renderer.drawJoystick()
 
-        -- 攻击按钮（仅游戏进行中显示）
-        if GS.gameState == "playing" then
-            Renderer.drawAttackButton(w, h)
-        end
-
-        -- 随机事件屏幕效果
         Renderer.drawEventEffects(w, h)
 
         -- 玩家复活倒计时覆盖
