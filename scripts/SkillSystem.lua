@@ -1,6 +1,6 @@
 -- ============================================================================
 -- SkillSystem.lua - 领主主动技能系统
--- 6个技能: dash, focusFire, barricade, repel, bloodSacrifice, bounty
+-- 4个技能: dash, bounty, arrowRain, shieldWall
 -- ============================================================================
 
 local GS = require("GameState")
@@ -11,17 +11,13 @@ local Entities = require("Entities")
 
 local SkillSystem = {}
 
--- 技能名称列表（按键位 1-6 对应）
-local SKILL_ORDER = { "dash", "focusFire", "barricade", "repel", "bloodSacrifice", "bounty" }
+local SKILL_ORDER = { "dash", "bounty", "arrowRain", "shieldWall" }
 
--- 技能中文名称
 local SKILL_NAMES = {
     dash = "领主冲锋",
-    focusFire = "集火号角",
-    barricade = "召唤拒马",
-    repel = "光环斥力",
-    bloodSacrifice = "血祭",
     bounty = "重金悬赏",
+    arrowRain = "箭雨",
+    shieldWall = "盾墙",
 }
 
 -- ============================================================================
@@ -31,9 +27,7 @@ local SKILL_NAMES = {
 function SkillSystem.init()
     GS.skillCooldowns = {}
     GS.skillStates = {}
-    GS.barricades = {}
     GS.bountyChests = {}
-    GS.skillSelectingTarget = false
     for _, name in ipairs(SKILL_ORDER) do
         GS.skillCooldowns[name] = 0
         GS.skillStates[name] = nil
@@ -66,14 +60,12 @@ function SkillSystem.isActive(skillId)
     return GS.skillStates[skillId] ~= nil
 end
 
---- 获取玩家领主引用
 local function getPlayerLord()
     local l = GS.lords[1]
     if l and l.alive and l.isPlayer then return l end
     return nil
 end
 
---- 获取玩家领主的随从列表
 local function getPlayerFollowers(lord)
     local result = {}
     for _, f in ipairs(GS.followers) do
@@ -84,6 +76,16 @@ local function getPlayerFollowers(lord)
     return result
 end
 
+local function countFollowerType(lord, fType)
+    local count = 0
+    for _, f in ipairs(GS.followers) do
+        if f.lordId == lord.id and f.alive and f.fType == fType then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 -- ============================================================================
 -- 能否释放判断
 -- ============================================================================
@@ -92,7 +94,6 @@ function SkillSystem.canActivate(skillId)
     local lord = getPlayerLord()
     if not lord then return false, "领主不存在" end
 
-    -- CD 检查
     if (GS.skillCooldowns[skillId] or 0) > 0 then
         return false, "冷却中"
     end
@@ -100,23 +101,24 @@ function SkillSystem.canActivate(skillId)
     local cfg = CONFIG.Skills[skillId]
     if not cfg then return false, "技能不存在" end
 
-    -- 资源检查
-    if skillId == "barricade" then
-        if lord.wood < cfg.woodCost then
-            return false, "木材不足(" .. cfg.woodCost .. ")"
-        end
-    elseif skillId == "bounty" then
+    if skillId == "bounty" then
         local totalRes = lord.wood + lord.stone
         if totalRes < cfg.resourceCost then
             return false, "资源不足(" .. cfg.resourceCost .. ")"
         end
     end
 
-    -- 血祭需要至少 sacrificeCount 个随从
-    if skillId == "bloodSacrifice" then
-        local followers = getPlayerFollowers(lord)
-        if #followers < cfg.sacrificeCount then
-            return false, "随从不足(" .. cfg.sacrificeCount .. ")"
+    if skillId == "arrowRain" then
+        local archerCount = countFollowerType(lord, "archer")
+        if archerCount < cfg.requireArchers then
+            return false, "弓箭手不足(" .. cfg.requireArchers .. ")"
+        end
+    end
+
+    if skillId == "shieldWall" then
+        local soldierCount = countFollowerType(lord, "soldier")
+        if soldierCount < cfg.requireSoldiers then
+            return false, "士兵不足(" .. cfg.requireSoldiers .. ")"
         end
     end
 
@@ -139,16 +141,12 @@ function SkillSystem.activate(skillId, ...)
 
     if skillId == "dash" then
         SkillSystem._activateDash(cfg, ...)
-    elseif skillId == "focusFire" then
-        SkillSystem._activateFocusFire(cfg, ...)
-    elseif skillId == "barricade" then
-        SkillSystem._activateBarricade(cfg)
-    elseif skillId == "repel" then
-        SkillSystem._activateRepel(cfg)
-    elseif skillId == "bloodSacrifice" then
-        SkillSystem._activateBloodSacrifice(cfg)
     elseif skillId == "bounty" then
         SkillSystem._activateBounty(cfg)
+    elseif skillId == "arrowRain" then
+        SkillSystem._activateArrowRain(cfg)
+    elseif skillId == "shieldWall" then
+        SkillSystem._activateShieldWall(cfg)
     end
 
     print("[SKILL] Activated: " .. SKILL_NAMES[skillId])
@@ -164,7 +162,6 @@ function SkillSystem._activateDash(cfg)
     local lord = getPlayerLord()
     if not lord then return end
 
-    -- 冲锋方向：取当前移动方向，若静止取面朝方向
     local dirX, dirY
     if math.abs(GS.joystickX) > 0.1 or math.abs(GS.joystickY) > 0.1 then
         dirX, dirY = Utils.normalize(GS.joystickX, GS.joystickY)
@@ -186,7 +183,6 @@ function SkillSystem._activateDash(cfg)
         followerSpeedTimer = cfg.followerSpeedDur,
     }
 
-    -- 视觉特效：冲锋拖尾粒子
     Entities.spawnParticle(lord.x, lord.y, 80, 160, 255, 8)
 end
 
@@ -199,46 +195,36 @@ local function _updateDash(dt)
     local cfg = CONFIG.Skills.dash
     state.timer = state.timer + dt
 
-    -- 位移阶段
     if state.timer < state.duration then
         local t = state.timer / state.duration
         lord.x = Utils.lerp(state.startX, state.endX, t)
         lord.y = Utils.lerp(state.startY, state.endY, t)
-        -- 冲锋期间无敌
         lord.invincibleTimer = 0.1
-        -- 拖尾粒子
         Entities.spawnParticle(lord.x, lord.y, 80, 160, 255, 2)
     else
-        -- 到达终点
         lord.x = state.endX
         lord.y = state.endY
 
-        -- 击溃到达点的敌人（一次性）
         if not state.knockbackDone then
             state.knockbackDone = true
             for _, f in ipairs(GS.followers) do
                 if f.alive and f.factionId ~= lord.faction then
                     local d = Utils.dist(lord.x, lord.y, f.x, f.y)
                     if d < cfg.interruptRadius then
-                        if true then
-                            local dx, dy = Utils.normalize(f.x - lord.x, f.y - lord.y)
-                            f.x = f.x + dx * cfg.knockback
-                            f.y = f.y + dy * cfg.knockback
-                            f.x = Utils.clamp(f.x, 10, CONFIG.MapWidth - 10)
-                            f.y = Utils.clamp(f.y, 10, CONFIG.MapHeight - 10)
-                            -- 打断攻击状态
-                            f.state = "following"
-                            f.targetId = nil
-                        end
+                        local dx, dy = Utils.normalize(f.x - lord.x, f.y - lord.y)
+                        f.x = f.x + dx * cfg.knockback
+                        f.y = f.y + dy * cfg.knockback
+                        f.x = Utils.clamp(f.x, 10, CONFIG.MapWidth - 10)
+                        f.y = Utils.clamp(f.y, 10, CONFIG.MapHeight - 10)
+                        f.state = "following"
+                        f.targetId = nil
                     end
                 end
             end
-            -- 冲击波特效
             Entities.spawnParticle(lord.x, lord.y, 255, 255, 100, 15)
         end
     end
 
-    -- 随从加速buff倒计时
     state.followerSpeedTimer = state.followerSpeedTimer - dt
     if state.timer >= state.duration and state.followerSpeedTimer <= 0 then
         GS.skillStates.dash = nil
@@ -246,240 +232,7 @@ local function _updateDash(dt)
 end
 
 -- ============================================================================
--- 技能2: 集火号角 (focusFire)
--- 点击敌方领主/Boss，弓箭手集火5s，骑士加速接近
--- ============================================================================
-
---- 进入集火选目标模式
-function SkillSystem._activateFocusFire(cfg)
-    -- 进入目标选择模式
-    GS.skillSelectingTarget = true
-    -- 暂不开始CD，等选中目标后才开始
-    GS.skillCooldowns.focusFire = 0
-    print("[SKILL] Focus Fire: select target (click enemy lord/boss)")
-end
-
---- 选中集火目标后调用
-function SkillSystem.confirmFocusFireTarget(targetId, targetType)
-    local lord = getPlayerLord()
-    if not lord then return end
-    local cfg = CONFIG.Skills.focusFire
-
-    GS.skillSelectingTarget = false
-    GS.skillCooldowns.focusFire = cfg.cd
-
-    GS.skillStates.focusFire = {
-        targetId = targetId,
-        targetType = targetType,  -- "lord" or "boss"
-        timer = cfg.duration,
-    }
-
-    Entities.spawnParticle(lord.x, lord.y, 255, 100, 50, 10)
-    print("[SKILL] Focus Fire confirmed on " .. targetType .. " id=" .. targetId)
-end
-
---- 取消集火目标选择
-function SkillSystem.cancelFocusFire()
-    GS.skillSelectingTarget = false
-    GS.skillCooldowns.focusFire = 0
-    print("[SKILL] Focus Fire cancelled")
-end
-
-local function _updateFocusFire(dt)
-    local state = GS.skillStates.focusFire
-    if not state then return end
-
-    state.timer = state.timer - dt
-
-    -- 检查目标是否还存在
-    local targetAlive = false
-    if state.targetType == "lord" then
-        local t = Entities.findLordById(state.targetId)
-        if t then targetAlive = true end
-    elseif state.targetType == "boss" then
-        local t = Entities.findBossById(state.targetId)
-        if t then targetAlive = true end
-    end
-
-    if state.timer <= 0 or not targetAlive then
-        GS.skillStates.focusFire = nil
-    end
-end
-
--- ============================================================================
--- 技能3: 召唤拒马 (barricade)
--- 消耗15木材，在领主身后放置障碍物
--- ============================================================================
-
-function SkillSystem._activateBarricade(cfg)
-    local lord = getPlayerLord()
-    if not lord then return end
-
-    -- 扣资源
-    lord.wood = lord.wood - cfg.woodCost
-
-    -- 在领主身后放置（面朝方向的反方向，偏移60px）
-    local behindX = lord.x - math.cos(lord.angle) * 60
-    local behindY = lord.y - math.sin(lord.angle) * 60
-    behindX = Utils.clamp(behindX, 20, CONFIG.MapWidth - 20)
-    behindY = Utils.clamp(behindY, 20, CONFIG.MapHeight - 20)
-
-    local barricade = {
-        id = GS.newId(),
-        x = behindX, y = behindY,
-        hp = cfg.hp,
-        maxHp = cfg.hp,
-        radius = cfg.radius,
-        lifetime = cfg.lifetime,
-        ownerFaction = lord.faction,
-        alive = true,
-    }
-    table.insert(GS.barricades, barricade)
-
-    Entities.spawnParticle(behindX, behindY, 139, 90, 43, 10)
-    print("[SKILL] Barricade placed at " .. math.floor(behindX) .. "," .. math.floor(behindY))
-end
-
-local function _updateBarricades(dt)
-    local cfg = CONFIG.Skills.barricade
-    for i = #GS.barricades, 1, -1 do
-        local b = GS.barricades[i]
-        if b.alive then
-            b.lifetime = b.lifetime - dt
-
-            -- 对接触拒马的敌方单位造成DPS
-            for _, f in ipairs(GS.followers) do
-                if f.alive and f.factionId ~= b.ownerFaction then
-                    local d = Utils.dist(f.x, f.y, b.x, b.y)
-                    if d < b.radius + 15 then
-                        f.hp = f.hp - cfg.dps * dt
-                        if f.hp <= 0 then
-                            f.alive = false
-                            Entities.spawnParticle(f.x, f.y, 139, 90, 43, 4)
-                        end
-                    end
-                end
-            end
-
-            -- 超时或HP耗尽则销毁
-            if b.lifetime <= 0 or b.hp <= 0 then
-                b.alive = false
-                Entities.spawnParticle(b.x, b.y, 139, 90, 43, 8)
-            end
-        end
-        if not b.alive then
-            table.remove(GS.barricades, i)
-        end
-    end
-end
-
--- ============================================================================
--- 技能4: 光环斥力 (repel)
--- 瞬间将光环内敌方近战单位推开100px
--- ============================================================================
-
-function SkillSystem._activateRepel(cfg)
-    local lord = getPlayerLord()
-    if not lord then return end
-
-    local pushCount = 0
-    local auraR = CONFIG.AuraRadius
-
-    for _, f in ipairs(GS.followers) do
-        if f.alive and f.factionId ~= lord.faction then
-            if f.fType ~= "archer" then
-                local d = Utils.dist(lord.x, lord.y, f.x, f.y)
-                if d < auraR then
-                    local dx, dy = Utils.normalize(f.x - lord.x, f.y - lord.y)
-                    -- 距离过近时给个默认方向
-                    if math.abs(dx) < 0.01 and math.abs(dy) < 0.01 then
-                        local randAngle = math.random() * math.pi * 2
-                        dx = math.cos(randAngle)
-                        dy = math.sin(randAngle)
-                    end
-                    f.x = f.x + dx * cfg.pushDist
-                    f.y = f.y + dy * cfg.pushDist
-                    f.x = Utils.clamp(f.x, 10, CONFIG.MapWidth - 10)
-                    f.y = Utils.clamp(f.y, 10, CONFIG.MapHeight - 10)
-                    -- 打断攻击
-                    f.state = "following"
-                    f.targetId = nil
-                    pushCount = pushCount + 1
-                end
-            end
-        end
-    end
-
-    -- 斥力波纹特效
-    GS.skillStates.repel = {
-        x = lord.x, y = lord.y,
-        timer = 0.5,  -- 视觉效果持续0.5s
-        radius = auraR,
-    }
-
-    Entities.spawnParticle(lord.x, lord.y, 180, 220, 255, 20)
-    print("[SKILL] Repel pushed " .. pushCount .. " enemies")
-end
-
-local function _updateRepel(dt)
-    local state = GS.skillStates.repel
-    if not state then return end
-    state.timer = state.timer - dt
-    if state.timer <= 0 then
-        GS.skillStates.repel = nil
-    end
-end
-
--- ============================================================================
--- 技能5: 血祭 (bloodSacrifice)
--- 牺牲2个最低HP随从，领主回30HP，全军狂暴6s
--- ============================================================================
-
-function SkillSystem._activateBloodSacrifice(cfg)
-    local lord = getPlayerLord()
-    if not lord then return end
-
-    local followers = getPlayerFollowers(lord)
-
-    -- 按HP排序（升序），牺牲最低HP的
-    table.sort(followers, function(a, b) return a.hp < b.hp end)
-
-    local sacrificed = 0
-    for i = 1, math.min(cfg.sacrificeCount, #followers) do
-        local f = followers[i]
-        f.alive = false
-        -- 牺牲特效（红色血雾）
-        Entities.spawnParticle(f.x, f.y, 200, 30, 30, 8)
-        Entities.spawnDamageNumber(f.x, f.y, "牺牲", 200, 30, 30)
-        sacrificed = sacrificed + 1
-    end
-
-    -- 领主回血
-    lord.hp = math.min(lord.maxHp, lord.hp + cfg.healLord)
-    Entities.spawnDamageNumber(lord.x, lord.y, "+" .. cfg.healLord, 50, 255, 100)
-
-    -- 启动狂暴状态
-    GS.skillStates.bloodSacrifice = {
-        timer = cfg.frenzyDur,
-        lordId = lord.id,
-    }
-
-    Entities.spawnParticle(lord.x, lord.y, 200, 30, 30, 15)
-    print("[SKILL] Blood Sacrifice: " .. sacrificed .. " followers sacrificed, frenzy active")
-end
-
-local function _updateBloodSacrifice(dt)
-    local state = GS.skillStates.bloodSacrifice
-    if not state then return end
-    state.timer = state.timer - dt
-    if state.timer <= 0 then
-        GS.skillStates.bloodSacrifice = nil
-        print("[SKILL] Frenzy ended")
-    end
-end
-
--- ============================================================================
--- 技能6: 重金悬赏 (bounty)
+-- 技能2: 重金悬赏 (bounty)
 -- 消耗50资源，放出金箱诱惑敌方平民/士兵
 -- ============================================================================
 
@@ -487,7 +240,6 @@ function SkillSystem._activateBounty(cfg)
     local lord = getPlayerLord()
     if not lord then return end
 
-    -- 扣资源（优先木材，不足补石头）
     local cost = cfg.resourceCost
     local woodUse = math.min(lord.wood, cost)
     lord.wood = lord.wood - woodUse
@@ -496,7 +248,6 @@ function SkillSystem._activateBounty(cfg)
         lord.stone = lord.stone - remaining
     end
 
-    -- 在领主前方120px放置金箱
     local frontX = lord.x + math.cos(lord.angle) * 120
     local frontY = lord.y + math.sin(lord.angle) * 120
     frontX = Utils.clamp(frontX, 20, CONFIG.MapWidth - 20)
@@ -534,13 +285,117 @@ local function _updateBountyChests(dt)
 end
 
 -- ============================================================================
+-- 技能3: 箭雨 (arrowRain)
+-- 解锁条件：3个弓箭手
+-- 在领主前方200px处降下箭雨，范围半径80px，3波AOE伤害
+-- ============================================================================
+
+function SkillSystem._activateArrowRain(cfg)
+    local lord = getPlayerLord()
+    if not lord then return end
+
+    local targetX = lord.x + math.cos(lord.angle) * cfg.range
+    local targetY = lord.y + math.sin(lord.angle) * cfg.range
+    targetX = Utils.clamp(targetX, 20, CONFIG.MapWidth - 20)
+    targetY = Utils.clamp(targetY, 20, CONFIG.MapHeight - 20)
+
+    GS.skillStates.arrowRain = {
+        x = targetX,
+        y = targetY,
+        radius = cfg.radius,
+        waves = cfg.waves,
+        waveInterval = cfg.waveInterval,
+        timer = 0,
+        wavesDone = 0,
+        damage = cfg.damage,
+        ownerFaction = lord.faction,
+    }
+
+    Entities.spawnParticle(targetX, targetY, 240, 200, 50, 10)
+    print("[SKILL] Arrow Rain at " .. math.floor(targetX) .. "," .. math.floor(targetY))
+end
+
+local function _updateArrowRain(dt)
+    local state = GS.skillStates.arrowRain
+    if not state then return end
+
+    state.timer = state.timer + dt
+
+    while state.wavesDone < state.waves and state.timer >= (state.wavesDone + 1) * state.waveInterval do
+        state.wavesDone = state.wavesDone + 1
+
+        for _, f in ipairs(GS.followers) do
+            if f.alive and f.factionId ~= state.ownerFaction then
+                local d = Utils.dist(state.x, state.y, f.x, f.y)
+                if d < state.radius then
+                    f.hp = f.hp - state.damage
+                    f.hitTimer = 0.2
+                    if f.hp <= 0 then
+                        f.alive = false
+                        Entities.spawnParticle(f.x, f.y, 240, 200, 50, 4)
+                    end
+                    Entities.spawnDamageNumber(f.x, f.y, state.damage, 240, 200, 50)
+                end
+            end
+        end
+
+        for _, l in ipairs(GS.lords) do
+            if l.alive and l.faction ~= state.ownerFaction then
+                local d = Utils.dist(state.x, state.y, l.x, l.y)
+                if d < state.radius then
+                    l.hp = l.hp - state.damage
+                    l.hitTimer = 0.2
+                    Entities.spawnDamageNumber(l.x, l.y, state.damage, 240, 200, 50)
+                end
+            end
+        end
+
+        Entities.spawnParticle(state.x, state.y, 240, 200, 50, 8)
+        print("[SKILL] Arrow Rain wave " .. state.wavesDone .. "/" .. state.waves)
+    end
+
+    if state.wavesDone >= state.waves then
+        GS.skillStates.arrowRain = nil
+    end
+end
+
+-- ============================================================================
+-- 技能4: 盾墙 (shieldWall)
+-- 解锁条件：3个士兵
+-- 所有士兵举盾3秒，受到伤害-50%，无法移动
+-- ============================================================================
+
+function SkillSystem._activateShieldWall(cfg)
+    local lord = getPlayerLord()
+    if not lord then return end
+
+    GS.skillStates.shieldWall = {
+        timer = cfg.duration,
+        factionId = lord.faction,
+    }
+
+    Entities.spawnParticle(lord.x, lord.y, 220, 80, 80, 12)
+    print("[SKILL] Shield Wall activated")
+end
+
+local function _updateShieldWall(dt)
+    local state = GS.skillStates.shieldWall
+    if not state then return end
+
+    state.timer = state.timer - dt
+    if state.timer <= 0 then
+        GS.skillStates.shieldWall = nil
+        print("[SKILL] Shield Wall ended")
+    end
+end
+
+-- ============================================================================
 -- 每帧更新（由 main.lua 调用）
 -- ============================================================================
 
 function SkillSystem.update(dt)
     if GS.gameState ~= "playing" then return end
 
-    -- 冷却倒计时
     for _, name in ipairs(SKILL_ORDER) do
         if GS.skillCooldowns[name] and GS.skillCooldowns[name] > 0 then
             GS.skillCooldowns[name] = GS.skillCooldowns[name] - dt
@@ -550,20 +405,16 @@ function SkillSystem.update(dt)
         end
     end
 
-    -- 各技能持续效果更新
     _updateDash(dt)
-    _updateFocusFire(dt)
-    _updateBarricades(dt)
-    _updateRepel(dt)
-    _updateBloodSacrifice(dt)
     _updateBountyChests(dt)
+    _updateArrowRain(dt)
+    _updateShieldWall(dt)
 end
 
 -- ============================================================================
 -- 查询接口（供其他模块使用）
 -- ============================================================================
 
---- 获取冲锋随从加速倍率（FollowerAI 用）
 function SkillSystem.getDashSpeedMul()
     local state = GS.skillStates.dash
     if state and state.followerSpeedTimer > 0 then
@@ -572,62 +423,6 @@ function SkillSystem.getDashSpeedMul()
     return 1.0
 end
 
---- 获取集火目标（FollowerAI 用）
---- 返回 targetEntity, targetType 或 nil
-function SkillSystem.getFocusFireTarget()
-    local state = GS.skillStates.focusFire
-    if not state then return nil, nil end
-    if state.targetType == "lord" then
-        return Entities.findLordById(state.targetId), "lord"
-    elseif state.targetType == "boss" then
-        return Entities.findBossById(state.targetId), "boss"
-    end
-    return nil, nil
-end
-
-
-
---- 获取狂暴攻速倍率（Combat 用）
-function SkillSystem.getFrenzyAtkSpeedMul(factionId)
-    local state = GS.skillStates.bloodSacrifice
-    if state then
-        local lord = getPlayerLord()
-        if lord and lord.faction == factionId then
-            return CONFIG.Skills.bloodSacrifice.atkSpeedMul
-        end
-    end
-    return 1.0
-end
-
---- 获取吸血比例（Combat 用）
-function SkillSystem.getLifestealPct(factionId)
-    local state = GS.skillStates.bloodSacrifice
-    if state then
-        local lord = getPlayerLord()
-        if lord and lord.faction == factionId then
-            return CONFIG.Skills.bloodSacrifice.lifestealPct
-        end
-    end
-    return 0
-end
-
---- 拒马减速查询（FollowerAI 用）
---- 返回减速因子（0.5 = 50%减速），若不在拒马范围内返回 1.0
-function SkillSystem.getBarricadeSlowFactor(x, y, factionId)
-    local cfgB = CONFIG.Skills.barricade
-    for _, b in ipairs(GS.barricades) do
-        if b.alive and b.ownerFaction ~= factionId then
-            local d = Utils.dist(x, y, b.x, b.y)
-            if d < b.radius + 15 then
-                return cfgB.slowFactor
-            end
-        end
-    end
-    return 1.0
-end
-
---- 悬赏金箱吸引查询（FollowerAI 用）
---- 返回最近的敌方金箱或 nil
 function SkillSystem.getNearestBountyChest(x, y, factionId)
     local nearest = nil
     local minDist = math.huge
@@ -643,20 +438,41 @@ function SkillSystem.getNearestBountyChest(x, y, factionId)
     return nearest, minDist
 end
 
---- 拒马碰撞阻挡（FollowerAI 用）
---- 敌方单位试图穿过拒马时被推回
-function SkillSystem.applyBarricadeCollision(f, dt)
-    for _, b in ipairs(GS.barricades) do
-        if b.alive and b.ownerFaction ~= f.factionId then
-            local d = Utils.dist(f.x, f.y, b.x, b.y)
-            if d < b.radius then
-                -- 推出拒马
-                local dx, dy = Utils.normalize(f.x - b.x, f.y - b.y)
-                f.x = b.x + dx * (b.radius + 1)
-                f.y = b.y + dy * (b.radius + 1)
-            end
+function SkillSystem.getArrowRainState()
+    return GS.skillStates.arrowRain
+end
+
+function SkillSystem.isShieldWallActive(factionId)
+    local state = GS.skillStates.shieldWall
+    if state and state.factionId == factionId then
+        return true
+    end
+    return false
+end
+
+function SkillSystem.isShieldWallStunned(follower)
+    if not SkillSystem.isShieldWallActive(follower.factionId) then
+        return false
+    end
+    return follower.fType == "soldier"
+end
+
+function SkillSystem.getUnlockStatus()
+    local lord = getPlayerLord()
+    local result = {}
+    for _, name in ipairs(SKILL_ORDER) do
+        local cfg = CONFIG.Skills[name]
+        if not cfg then
+            result[name] = false
+        elseif name == "arrowRain" then
+            result[name] = lord and countFollowerType(lord, "archer") >= cfg.requireArchers
+        elseif name == "shieldWall" then
+            result[name] = lord and countFollowerType(lord, "soldier") >= cfg.requireSoldiers
+        else
+            result[name] = true
         end
     end
+    return result
 end
 
 return SkillSystem

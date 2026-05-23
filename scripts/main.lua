@@ -624,48 +624,6 @@ function HandleMouseDown(eventType, eventData)
             end
         end
 
-        -- 集火目标选择模式：左键点击选目标
-        if GS.skillSelectingTarget and GS.gameState == "playing" then
-            local mx = input:GetMousePosition().x
-            local my = input:GetMousePosition().y
-            local wx, wy = Utils.screenToWorld(mx, my)
-
-            -- 检测点击了哪个敌方领主或Boss
-            local playerFaction = GS.lords[1] and GS.lords[1].faction or 1
-            local found = false
-
-            -- 优先检测Boss（更大的点击区域）
-            for _, b in ipairs(GS.bosses) do
-                if b.alive then
-                    local d = Utils.dist(wx, wy, b.x, b.y)
-                    if d < CONFIG.BossRadius + 10 then
-                        SkillSystem.confirmFocusFireTarget(b.id, "boss")
-                        found = true
-                        break
-                    end
-                end
-            end
-
-            -- 然后检测敌方领主
-            if not found then
-                for _, l in ipairs(GS.lords) do
-                    if l.alive and l.faction ~= playerFaction then
-                        local d = Utils.dist(wx, wy, l.x, l.y)
-                        if d < CONFIG.LordRadiusMax + 10 then
-                            SkillSystem.confirmFocusFireTarget(l.id, "lord")
-                            found = true
-                            break
-                        end
-                    end
-                end
-            end
-
-            if not found then
-                print("[SKILL] No valid target clicked, keep selecting...")
-            end
-            return
-        end
-
         if GS.gameState == "gameover" or GS.gameState == "victory" then
             GS.gameState = "main_menu"
             MainMenuUI.initGameFn = initGame
@@ -686,32 +644,15 @@ function HandleKeyDown(eventType, eventData)
 
     -- 战术指令快捷键
     if GS.gameState == "playing" and GS.lords[1] and GS.lords[1].alive then
-        -- 技能快捷键 KEY_1 ~ KEY_6
         local skillKeys = {
             [KEY_1] = "dash",
-            [KEY_2] = "focusFire",
-            [KEY_3] = "barricade",
-            [KEY_4] = "repel",
-            [KEY_5] = "bloodSacrifice",
-            [KEY_6] = "bounty",
+            [KEY_2] = "bounty",
+            [KEY_3] = "arrowRain",
+            [KEY_4] = "shieldWall",
         }
         local skillId = skillKeys[key]
         if skillId then
-            -- 集火选择模式下按其他键或再按2取消
-            if GS.skillSelectingTarget then
-                if skillId ~= "focusFire" then
-                    SkillSystem.cancelFocusFire()
-                else
-                    SkillSystem.cancelFocusFire()
-                    return
-                end
-            end
             SkillSystem.activate(skillId)
-        end
-
-        -- ESC 取消集火选择
-        if key == KEY_ESCAPE and GS.skillSelectingTarget then
-            SkillSystem.cancelFocusFire()
         end
     end
 end
@@ -763,8 +704,6 @@ function HandleNanoVGRender(eventType, eventData)
         -- 绘制世界
         Renderer.drawBackground(w, h)
 
-        -- 绘制拒马和悬赏金箱（技能系统实体，始终在角色脚下）
-        Renderer.drawBarricades()
         Renderer.drawBountyChests()
 
         -- 绘制宝箱和遗产（地面物件，始终在角色脚下）

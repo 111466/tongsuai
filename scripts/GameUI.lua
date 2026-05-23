@@ -14,25 +14,23 @@ local SettingsUI = require("SettingsUI")
 
 local M = {}
 
---- 退出到主菜单的回调（由 main.lua 设置）
 M.onQuitToMenu = nil
 
--- 技能图标与颜色
 local SKILL_ICONS = {
     dash = "冲",
-    focusFire = "火",
-    barricade = "拒",
-    repel = "斥",
-    bloodSacrifice = "祭",
     bounty = "赏",
+    arrowRain = "雨",
+    shieldWall = "盾",
 }
 local SKILL_COLORS = {
     dash = {80, 160, 255},
-    focusFire = {255, 100, 50},
-    barricade = {139, 90, 43},
-    repel = {180, 220, 255},
-    bloodSacrifice = {200, 30, 30},
     bounty = {255, 200, 0},
+    arrowRain = {100, 200, 255},
+    shieldWall = {180, 140, 80},
+}
+local SKILL_UNLOCK = {
+    arrowRain = { type = "archer", count = 3, label = "需3弓手" },
+    shieldWall = { type = "soldier", count = 3, label = "需3士兵" },
 }
 
 -- ============================================================================
@@ -44,14 +42,12 @@ function M.ShowTalentSelectUI(initGameFn)
     local function startGameFromTalentSelect()
         GS.gameState = "playing"
         initGameFn()
-        -- 天赋效果通过 TS.getActiveEffects() 在各系统实时查询，无需手动 apply
         M.CreateGameUI()
     end
 
     GS.gameState = "talent_select"
-    GS.uiRoot_ = nil  -- 清除游戏UI引用
+    GS.uiRoot_ = nil
 
-    -- 新版天赋为三路线天赋树，暂时跳过天赋选择界面直接开局
     startGameFromTalentSelect()
 end
 
@@ -60,13 +56,109 @@ end
 -- ============================================================================
 
 function M.CreateGameUI()
+    local screenW = 1280
+    local screenH = 720
+
+    local atkR = 42
+    local atkCX = screenW - 100
+    local atkCY = screenH - 110
+
+    local skillR = 32
+    local skillDist = 90
+
+    local skillAngles = {
+        dash       = -math.pi / 2,
+        arrowRain  = -math.pi / 6,
+        shieldWall = math.pi + math.pi / 6,
+        bounty     = math.pi / 2,
+    }
+
+    local function skillPos(id)
+        local a = skillAngles[id] or 0
+        return math.floor(atkCX + math.cos(a) * skillDist),
+               math.floor(atkCY + math.sin(a) * skillDist)
+    end
+
+    local skillChildren = {}
+    local skillOrder = SkillSystem.getSkillOrder()
+    for idx, skillId in ipairs(skillOrder) do
+        local sc = SKILL_COLORS[skillId] or {200, 200, 200}
+        local icon = SKILL_ICONS[skillId] or "?"
+        local sx, sy = skillPos(skillId)
+        local unlockInfo = SKILL_UNLOCK[skillId]
+
+        table.insert(skillChildren, UI.Panel {
+            id = "skillBtn_" .. skillId,
+            position = "absolute",
+            left = sx - skillR,
+            top = sy - skillR,
+            width = skillR * 2,
+            height = skillR * 2,
+            backgroundColor = {sc[1], sc[2], sc[3], 180},
+            borderRadius = skillR,
+            borderWidth = 2,
+            borderColor = {255, 255, 255, 80},
+            justifyContent = "center",
+            alignItems = "center",
+            cursor = "pointer",
+            onClick = function()
+                SkillSystem.activate(skillId)
+            end,
+            children = {
+                UI.Label {
+                    text = icon,
+                    fontSize = 18,
+                    fontWeight = "bold",
+                    fontColor = {255, 255, 255, 255},
+                    textAlign = "center",
+                },
+                UI.Label {
+                    id = "skillKey_" .. skillId,
+                    text = tostring(idx),
+                    fontSize = 9,
+                    fontColor = {255, 255, 255, 150},
+                    textAlign = "center",
+                },
+                UI.Panel {
+                    id = "skillCD_" .. skillId,
+                    position = "absolute",
+                    top = 0, left = 0, right = 0, bottom = 0,
+                    backgroundColor = {0, 0, 0, 0},
+                    borderRadius = skillR,
+                    justifyContent = "center",
+                    alignItems = "center",
+                    pointerEvents = "none",
+                    children = {
+                        UI.Label {
+                            id = "skillCDText_" .. skillId,
+                            text = "",
+                            fontSize = 14,
+                            fontWeight = "bold",
+                            fontColor = {255, 255, 255, 255},
+                            textAlign = "center",
+                        },
+                    },
+                },
+                UI.Label {
+                    id = "skillUnlock_" .. skillId,
+                    text = unlockInfo and unlockInfo.label or "",
+                    fontSize = 8,
+                    fontColor = {255, 100, 100, 220},
+                    textAlign = "center",
+                    position = "absolute",
+                    bottom = -14,
+                    left = 0, right = 0,
+                },
+            },
+        })
+    end
+
     GS.uiRoot_ = UI.Panel {
         id = "gameUI",
         width = "100%",
         height = "100%",
         pointerEvents = "box-none",
         children = {
-            -- 左上角资源面板 + 退出按钮
             UI.Panel {
                 position = "absolute",
                 top = 10,
@@ -115,7 +207,6 @@ function M.CreateGameUI()
                         paddingTop = 5, paddingBottom = 5,
                         cursor = "pointer",
                         onClick = function()
-                            -- 显示退出确认弹窗
                             local dlg = GS.uiRoot_ and GS.uiRoot_:FindById("quitConfirmOverlay")
                             if dlg then dlg:SetVisible(true) end
                         end,
@@ -130,7 +221,6 @@ function M.CreateGameUI()
                 },
             },
 
-            -- 右上角：AI状态指示
             UI.Panel {
                 id = "factionPanel",
                 position = "absolute",
@@ -151,100 +241,32 @@ function M.CreateGameUI()
                 },
             },
 
-            -- 技能按钮栏
             UI.Panel {
                 id = "skillPanel",
                 position = "absolute",
-                bottom = 70,
+                top = 0,
                 left = 0,
                 right = 0,
-                flexDirection = "row",
-                justifyContent = "center",
-                gap = 6,
+                bottom = 0,
                 pointerEvents = "box-none",
-                children = (function()
-                    local btns = {}
-                    local skillOrder = SkillSystem.getSkillOrder()
-                    for idx, skillId in ipairs(skillOrder) do
-                        local sc = SKILL_COLORS[skillId] or {200, 200, 200}
-                        local icon = SKILL_ICONS[skillId] or "?"
-                        local skillName = SkillSystem.getSkillName(skillId)
-                        table.insert(btns, UI.Panel {
-                            id = "skillBtn_" .. skillId,
-                            width = 48, height = 48,
-                            backgroundColor = {sc[1], sc[2], sc[3], 180},
-                            borderRadius = 8,
-                            borderWidth = 1,
-                            borderColor = {255, 255, 255, 80},
-                            justifyContent = "center",
-                            alignItems = "center",
-                            cursor = "pointer",
-                            onClick = function()
-                                SkillSystem.activate(skillId)
-                            end,
-                            children = {
-                                UI.Label {
-                                    text = icon,
-                                    fontSize = 18,
-                                    fontWeight = "bold",
-                                    fontColor = {255, 255, 255, 255},
-                                    textAlign = "center",
-                                },
-                                UI.Label {
-                                    id = "skillKey_" .. skillId,
-                                    text = tostring(idx),
-                                    fontSize = 9,
-                                    fontColor = {255, 255, 255, 150},
-                                    textAlign = "center",
-                                },
-                                -- 冷却覆盖层
-                                UI.Panel {
-                                    id = "skillCD_" .. skillId,
-                                    position = "absolute",
-                                    top = 0, left = 0, right = 0, bottom = 0,
-                                    backgroundColor = {0, 0, 0, 0},
-                                    borderRadius = 8,
-                                    justifyContent = "center",
-                                    alignItems = "center",
-                                    pointerEvents = "none",
-                                    children = {
-                                        UI.Label {
-                                            id = "skillCDText_" .. skillId,
-                                            text = "",
-                                            fontSize = 14,
-                                            fontWeight = "bold",
-                                            fontColor = {255, 255, 255, 255},
-                                            textAlign = "center",
-                                        },
-                                    },
-                                },
-                            },
-                        })
-                    end
-                    return btns
-                end)(),
+                children = skillChildren,
             },
 
-            -- 底部操作按钮
             UI.Panel {
                 id = "actionPanel",
                 position = "absolute",
                 bottom = 20,
-                left = 0,
-                right = 0,
+                left = 20,
                 flexDirection = "row",
-                justifyContent = "center",
-                gap = 12,
+                gap = 8,
                 pointerEvents = "box-none",
                 children = {
                     UI.Button {
                         id = "btnBuyPeasant",
-                        text = "招募平民(10木材)",
-                        fontSize = 13,
-                        paddingLeft = 14,
-                        paddingRight = 14,
-                        paddingTop = 10,
-                        paddingBottom = 10,
+                        text = "招募(10木)",
+                        fontSize = 12,
+                        paddingLeft = 10, paddingRight = 10,
+                        paddingTop = 8, paddingBottom = 8,
                         onClick = function()
                             local lord = GS.lords[1]
                             if lord and lord.alive and lord.wood >= CONFIG.PeasantCost then
@@ -256,16 +278,13 @@ function M.CreateGameUI()
                     },
                     UI.Button {
                         id = "btnBuySoldier",
-                        text = "转化士兵(20木材)",
-                        fontSize = 13,
-                        paddingLeft = 14,
-                        paddingRight = 14,
-                        paddingTop = 10,
-                        paddingBottom = 10,
+                        text = "士兵(10木)",
+                        fontSize = 12,
+                        paddingLeft = 10, paddingRight = 10,
+                        paddingTop = 8, paddingBottom = 8,
                         onClick = function()
                             local lord = GS.lords[1]
                             if lord and lord.alive and lord.wood >= CONFIG.SoldierCost then
-                                -- 找一个平民转化
                                 local converted = false
                                 for _, f in ipairs(GS.followers) do
                                     if f.lordId == lord.id and f.alive and f.fType == "peasant" and f.state == "following" then
@@ -278,7 +297,6 @@ function M.CreateGameUI()
                                     end
                                 end
                                 if not converted then
-                                    -- 没有平民可转化
                                     print("没有可转化的平民!")
                                 end
                             end
@@ -287,9 +305,9 @@ function M.CreateGameUI()
                     UI.Button {
                         id = "btnUpgradeArcher",
                         text = "弓手(10石+10木)",
-                        fontSize = 13,
-                        paddingLeft = 12, paddingRight = 12,
-                        paddingTop = 10, paddingBottom = 10,
+                        fontSize = 12,
+                        paddingLeft = 10, paddingRight = 10,
+                        paddingTop = 8, paddingBottom = 8,
                         onClick = function()
                             local lord = GS.lords[1]
                             local archerStone = CONFIG.ArcherCostStone
@@ -311,10 +329,10 @@ function M.CreateGameUI()
                     },
                     UI.Button {
                         id = "btnRecruitHealer",
-                        text = "治愈师(20石+20木)",
-                        fontSize = 13,
-                        paddingLeft = 12, paddingRight = 12,
-                        paddingTop = 10, paddingBottom = 10,
+                        text = "治愈(15石+15木)",
+                        fontSize = 12,
+                        paddingLeft = 10, paddingRight = 10,
+                        paddingTop = 8, paddingBottom = 8,
                         onClick = function()
                             local lord = GS.lords[1]
                             local cost = CONFIG.HealerCost
@@ -329,12 +347,9 @@ function M.CreateGameUI()
                             end
                         end,
                     },
-
-
                 },
             },
 
-            -- 调试面板（开发者模式）
             UI.Panel {
                 id = "devDebugPanel",
                 position = "absolute",
@@ -418,7 +433,6 @@ function M.CreateGameUI()
                 },
             },
 
-            -- 退出确认弹窗（默认隐藏）
             UI.Panel {
                 id = "quitConfirmOverlay",
                 position = "absolute",
@@ -481,8 +495,6 @@ function M.CreateGameUI()
                     },
                 },
             },
-
-            -- 虚拟摇杆区域(通过NanoVG绘制，这里只是占位)
         },
     }
 
@@ -507,10 +519,12 @@ function M.UpdateGameUI()
     local peasantCount = Entities.countFollowers(lord.id, "peasant")
     local soldierCount = Entities.countFollowers(lord.id, "soldier")
     local archerCount = Entities.countFollowers(lord.id, "archer")
+    local healerCount = Entities.countFollowers(lord.id, "healer")
     local armyLabel = GS.uiRoot_:FindById("armyLabel")
     if armyLabel then
-        local parts = {"平民:" .. peasantCount, "兵:" .. soldierCount}
+        local parts = {"农:" .. peasantCount, "兵:" .. soldierCount}
         if archerCount > 0 then table.insert(parts, "弓:" .. archerCount) end
+        if healerCount > 0 then table.insert(parts, "治:" .. healerCount) end
         armyLabel:SetText(table.concat(parts, " "))
     end
 
@@ -519,7 +533,6 @@ function M.UpdateGameUI()
         timeLabel:SetText(string.format("时间: %.0f秒", GS.gameTime))
     end
 
-    -- 阵营数量
     local aliveCount = 0
     for _, l in ipairs(GS.lords) do
         if l.alive then aliveCount = aliveCount + 1 end
@@ -529,46 +542,56 @@ function M.UpdateGameUI()
         factionLabel:SetText("存活: " .. aliveCount .. "/" .. (CONFIG.AILordCount + 1))
     end
 
-
-
-    -- 更新升级按钮文本（固定费用）
     local btnArcher = GS.uiRoot_:FindById("btnUpgradeArcher")
     if btnArcher then
         btnArcher:SetText("弓手(" .. CONFIG.ArcherCostStone .. "石+" .. CONFIG.ArcherCostWood .. "木)")
     end
 
-    -- 开发者调试面板显隐
     local devPanel = GS.uiRoot_:FindById("devDebugPanel")
     if devPanel then
         local devOn = SettingsUI.get("devMode") == true
         devPanel:SetVisible(devOn)
     end
 
-    -- 技能按钮冷却更新
+    local unlockStatus = SkillSystem.getUnlockStatus()
     local skillOrder = SkillSystem.getSkillOrder()
     for _, skillId in ipairs(skillOrder) do
         local cdOverlay = GS.uiRoot_:FindById("skillCD_" .. skillId)
         local cdText = GS.uiRoot_:FindById("skillCDText_" .. skillId)
         local btnPanel = GS.uiRoot_:FindById("skillBtn_" .. skillId)
+        local unlockLabel = GS.uiRoot_:FindById("skillUnlock_" .. skillId)
         if cdOverlay and cdText and btnPanel then
-            local cd = SkillSystem.getCooldown(skillId)
-            local isActive = SkillSystem.isActive(skillId)
-            if cd > 0 then
-                -- 冷却中：灰色遮罩 + 倒计时数字
-                cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 150} })
-                cdText:SetText(string.format("%.0f", math.ceil(cd)))
-                btnPanel:SetStyle({ borderColor = {100, 100, 100, 150} })
-            elseif isActive then
-                -- 激活中：高亮边框
-                cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 0} })
-                cdText:SetText("")
-                local sc = SKILL_COLORS[skillId] or {200, 200, 200}
-                btnPanel:SetStyle({ borderColor = {255, 255, 255, 255}, borderWidth = 2 })
+            local unlocked = true
+            if unlockStatus[skillId] ~= nil then
+                unlocked = unlockStatus[skillId]
+            end
+
+            if not unlocked then
+                cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 180} })
+                cdText:SetText("🔒")
+                btnPanel:SetStyle({ borderColor = {80, 80, 80, 150}, borderWidth = 2 })
+                if unlockLabel then
+                    local info = SKILL_UNLOCK[skillId]
+                    if info then unlockLabel:SetText(info.label) end
+                end
             else
-                -- 可用
-                cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 0} })
-                cdText:SetText("")
-                btnPanel:SetStyle({ borderColor = {255, 255, 255, 80}, borderWidth = 1 })
+                if unlockLabel then unlockLabel:SetText("") end
+                local cd = SkillSystem.getCooldown(skillId)
+                local isActive = SkillSystem.isActive(skillId)
+                if cd > 0 then
+                    cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 150} })
+                    cdText:SetText(string.format("%.0f", math.ceil(cd)))
+                    btnPanel:SetStyle({ borderColor = {100, 100, 100, 150}, borderWidth = 1 })
+                elseif isActive then
+                    cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 0} })
+                    cdText:SetText("")
+                    local sc = SKILL_COLORS[skillId] or {200, 200, 200}
+                    btnPanel:SetStyle({ borderColor = {255, 255, 255, 255}, borderWidth = 2 })
+                else
+                    cdOverlay:SetStyle({ backgroundColor = {0, 0, 0, 0} })
+                    cdText:SetText("")
+                    btnPanel:SetStyle({ borderColor = {255, 255, 255, 80}, borderWidth = 1 })
+                end
             end
         end
     end

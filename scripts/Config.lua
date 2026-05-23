@@ -140,25 +140,24 @@ local CONFIG = {
             knockback = 80, interruptRadius = 50,
             followerSpeedMul = 1.5, followerSpeedDur = 2.0,
         },
-        focusFire = {
-            cd = 12, duration = 5,
-        },
-        barricade = {
-            cd = 10, woodCost = 15,
-            hp = 60, slowFactor = 0.5, dps = 5,
-            radius = 25, lifetime = 15,
-        },
-        repel = {
-            cd = 15, pushDist = 100,
-            -- radius uses AuraRadius at runtime
-        },
-        bloodSacrifice = {
-            cd = 20, sacrificeCount = 2, healLord = 30,
-            frenzyDur = 6, atkSpeedMul = 1.5, lifestealPct = 0.1,
-        },
         bounty = {
             cd = 25, resourceCost = 50,
             lureRadius = 300, stunDur = 2.0, lifetime = 10,
+        },
+        arrowRain = {
+            cd = 15,
+            requireArchers = 3,
+            range = 200,
+            radius = 80,
+            waves = 3,
+            waveInterval = 1.0,
+            damage = 15,
+        },
+        shieldWall = {
+            cd = 12,
+            requireSoldiers = 3,
+            duration = 3.0,
+            damageReduction = 0.5,
         },
     },
 

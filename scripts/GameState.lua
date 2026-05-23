@@ -71,9 +71,7 @@ local GS = {
     -- 技能系统
     skillCooldowns = {},        -- skillName -> remainingCD
     skillStates = {},           -- 技能激活状态
-    barricades = {},            -- 拒马实体数组
     bountyChests = {},          -- 悬赏金箱数组
-    skillSelectingTarget = false, -- 集火目标选择模式
 
     -- UI引用
     uiRoot_ = nil,

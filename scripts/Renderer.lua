@@ -1224,6 +1224,27 @@ function M.drawFollower(f)
 
     nvgRestore(ctx)  -- 恢复变换
 
+    -- ========== 盾墙特效：蓝色护盾光环 ==========
+    local shieldState = GS.skillStates.shieldWall
+    if shieldState and f.fType == "soldier" and f.factionId == (GS.lords[1] and GS.lords[1].faction) then
+        local swPulse = 0.7 + math.sin(GS.gameTime * 4 + (f.id or 0) * 0.3) * 0.3
+        local swAlpha = math.floor(80 * swPulse)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, sx, drawY, radius + 5)
+        nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, swAlpha + 60))
+        nvgStrokeWidth(ctx, 2)
+        nvgStroke(ctx)
+        nvgBeginPath(ctx)
+        nvgCircle(ctx, sx, drawY, radius + 5)
+        nvgFillColor(ctx, nvgRGBA(80, 160, 255, math.floor(swAlpha * 0.3)))
+        nvgFill(ctx)
+        nvgFontFace(ctx, "sans")
+        nvgFontSize(ctx, 9)
+        nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
+        nvgFillColor(ctx, nvgRGBA(120, 200, 255, swAlpha + 80))
+        nvgText(ctx, sx, drawY - radius - 7, "盾", nil)
+    end
+
     -- ========== 6) HP条（受伤时显示，不受缩放影响） ==========
     if f.hp and f.maxHp and f.hp < f.maxHp then
         local barW = radius * 2
@@ -2123,80 +2144,6 @@ function M.drawGameOverScreen(w, h)
 end
 
 -- ============================================================================
--- 拒马绘制
--- ============================================================================
-function M.drawBarricades()
-    for _, b in ipairs(GS.barricades) do
-        if not b.alive then goto continue end
-        if not Utils.isOnScreen(b.x, b.y, b.radius + 20) then goto continue end
-
-        local sx, sy = Utils.worldToScreen(b.x, b.y)
-        local hpRatio = b.hp / b.maxHp
-
-        -- 底部阴影
-        nvgBeginPath(ctx)
-        nvgEllipse(ctx, sx, sy + 6, b.radius + 4, 6)
-        nvgFillColor(ctx, nvgRGBA(0, 0, 0, 40))
-        nvgFill(ctx)
-
-        -- 拒马主体：交叉木桩 (X形状)
-        nvgSave(ctx)
-        nvgTranslate(ctx, sx, sy)
-        -- 左斜桩
-        nvgBeginPath(ctx)
-        nvgMoveTo(ctx, -b.radius, -b.radius * 0.8)
-        nvgLineTo(ctx, b.radius, b.radius * 0.8)
-        nvgStrokeColor(ctx, nvgRGBA(139, 90, 43, 255))
-        nvgStrokeWidth(ctx, 5)
-        nvgStroke(ctx)
-        -- 右斜桩
-        nvgBeginPath(ctx)
-        nvgMoveTo(ctx, b.radius, -b.radius * 0.8)
-        nvgLineTo(ctx, -b.radius, b.radius * 0.8)
-        nvgStrokeColor(ctx, nvgRGBA(139, 90, 43, 255))
-        nvgStrokeWidth(ctx, 5)
-        nvgStroke(ctx)
-        -- 中心横桩
-        nvgBeginPath(ctx)
-        nvgMoveTo(ctx, -b.radius * 0.6, 0)
-        nvgLineTo(ctx, b.radius * 0.6, 0)
-        nvgStrokeColor(ctx, nvgRGBA(160, 110, 60, 255))
-        nvgStrokeWidth(ctx, 4)
-        nvgStroke(ctx)
-        -- 尖端点
-        for _, pos in ipairs({{-b.radius, -b.radius*0.8}, {b.radius, -b.radius*0.8}, {-b.radius, b.radius*0.8}, {b.radius, b.radius*0.8}}) do
-            nvgBeginPath(ctx)
-            nvgCircle(ctx, pos[1], pos[2], 3)
-            nvgFillColor(ctx, nvgRGBA(180, 140, 80, 255))
-            nvgFill(ctx)
-        end
-        nvgRestore(ctx)
-
-        -- 伤害范围指示（脉冲）
-        local pulse = 0.7 + math.sin(GS.gameTime * 3) * 0.3
-        nvgBeginPath(ctx)
-        nvgCircle(ctx, sx, sy, (b.radius + 15) * pulse)
-        nvgStrokeColor(ctx, nvgRGBA(200, 80, 30, 30))
-        nvgStrokeWidth(ctx, 1)
-        nvgStroke(ctx)
-
-        -- HP条
-        local barW = b.radius * 2
-        local barH = 3
-        nvgBeginPath(ctx)
-        nvgRoundedRect(ctx, sx - barW/2, sy - b.radius - 8, barW, barH, 1)
-        nvgFillColor(ctx, nvgRGBA(0, 0, 0, 120))
-        nvgFill(ctx)
-        nvgBeginPath(ctx)
-        nvgRoundedRect(ctx, sx - barW/2, sy - b.radius - 8, barW * hpRatio, barH, 1)
-        nvgFillColor(ctx, nvgRGBA(139, 90, 43, 220))
-        nvgFill(ctx)
-
-        ::continue::
-    end
-end
-
--- ============================================================================
 -- 悬赏金箱绘制
 -- ============================================================================
 function M.drawBountyChests()
@@ -2267,110 +2214,46 @@ function M.drawSkillEffects(w, h)
         nvgStroke(ctx)
     end
 
-    -- 2) 集火目标指示器
-    local focusState = GS.skillStates.focusFire
-    if focusState then
-        local target, tType = SkillSystem.getFocusFireTarget()
-        if target then
-            local tSX, tSY = Utils.worldToScreen(target.x, target.y)
-            -- 旋转十字准星
-            local rotAngle = GS.gameTime * 3
-            nvgSave(ctx)
-            nvgTranslate(ctx, tSX, tSY)
-            nvgRotate(ctx, rotAngle)
-            -- 四条短线
-            for i = 0, 3 do
-                nvgSave(ctx)
-                nvgRotate(ctx, i * math.pi / 2)
-                nvgBeginPath(ctx)
-                nvgMoveTo(ctx, 18, 0)
-                nvgLineTo(ctx, 28, 0)
-                nvgStrokeColor(ctx, nvgRGBA(255, 100, 50, 200))
-                nvgStrokeWidth(ctx, 3)
-                nvgStroke(ctx)
-                nvgRestore(ctx)
-            end
-            nvgRestore(ctx)
-            -- 外圈
-            local pulseR = 30 + math.sin(GS.gameTime * 5) * 4
-            nvgBeginPath(ctx)
-            nvgCircle(ctx, tSX, tSY, pulseR)
-            nvgStrokeColor(ctx, nvgRGBA(255, 100, 50, 150))
-            nvgStrokeWidth(ctx, 2)
-            nvgStroke(ctx)
-            -- 标签
-            nvgFontFace(ctx, "sans")
-            nvgFontSize(ctx, 12)
-            nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
-            nvgFillColor(ctx, nvgRGBA(255, 100, 50, 220))
-            nvgText(ctx, tSX, tSY - 34, "集火", nil)
-            -- 剩余时间
-            local remaining = string.format("%.1fs", focusState.timer)
-            nvgFontSize(ctx, 10)
-            nvgFillColor(ctx, nvgRGBA(255, 200, 100, 180))
-            nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
-            nvgText(ctx, tSX, tSY + 34, remaining, nil)
-        end
-    end
+    -- 2) 箭雨特效
+    local arrowRainState = SkillSystem.getArrowRainState()
+    if arrowRainState then
+        local arSX, arSY = Utils.worldToScreen(arrowRainState.x, arrowRainState.y)
+        local cfg = CONFIG.Skills.arrowRain
+        local arRadius = cfg.radius
+        local progress = arrowRainState.timer / arrowRainState.maxTimer
+        local pulse = 0.8 + math.sin(GS.gameTime * 6) * 0.2
 
-    -- 3) 集火目标选择模式提示
-    if GS.skillSelectingTarget then
-        nvgFontFace(ctx, "sans")
-        nvgFontSize(ctx, 18)
-        nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_TOP)
-        local flashA = 180 + math.floor(math.sin(GS.gameTime * 4) * 75)
-        nvgFillColor(ctx, nvgRGBA(255, 150, 50, flashA))
-        nvgText(ctx, w / 2, 80, "点击敌方领主/Boss选择集火目标 (再按2取消)", nil)
-    end
-
-    -- 4) 斥力波纹动画
-    local repelState = GS.skillStates.repel
-    if repelState then
-        local rSX, rSY = Utils.worldToScreen(repelState.x, repelState.y)
-        local progress = 1.0 - (repelState.timer / 0.5)
-        local waveR = repelState.radius * progress
-        local alpha = math.floor(200 * (1.0 - progress))
         nvgBeginPath(ctx)
-        nvgCircle(ctx, rSX, rSY, waveR)
-        nvgStrokeColor(ctx, nvgRGBA(180, 220, 255, alpha))
-        nvgStrokeWidth(ctx, 3)
-        nvgStroke(ctx)
-        -- 内圈
+        nvgCircle(ctx, arSX, arSY, arRadius * pulse)
+        nvgFillColor(ctx, nvgRGBA(255, 60, 60, 40))
+        nvgFill(ctx)
         nvgBeginPath(ctx)
-        nvgCircle(ctx, rSX, rSY, waveR * 0.6)
-        nvgStrokeColor(ctx, nvgRGBA(200, 240, 255, math.floor(alpha * 0.6)))
+        nvgCircle(ctx, arSX, arSY, arRadius * pulse)
+        nvgStrokeColor(ctx, nvgRGBA(255, 80, 80, 120))
         nvgStrokeWidth(ctx, 2)
         nvgStroke(ctx)
-    end
 
-    -- 5) 血祭狂暴光环
-    local frenzyState = GS.skillStates.bloodSacrifice
-    if frenzyState then
-        local lord = GS.lords[1]
-        if lord and lord.alive then
-            local fSX, fSY = Utils.worldToScreen(lord.x, lord.y)
-            -- 红色脉冲光环（覆盖领主附近区域）
-            local fPulse = 0.8 + math.sin(GS.gameTime * 6) * 0.2
-            local fRadius = CONFIG.AuraRadius * 0.4 * fPulse
-            local fAlpha = math.floor(40 + math.sin(GS.gameTime * 4) * 20)
-            nvgBeginPath(ctx)
-            nvgCircle(ctx, fSX, fSY, fRadius)
-            nvgFillColor(ctx, nvgRGBA(200, 30, 30, fAlpha))
-            nvgFill(ctx)
-            nvgBeginPath(ctx)
-            nvgCircle(ctx, fSX, fSY, fRadius)
-            nvgStrokeColor(ctx, nvgRGBA(255, 50, 50, fAlpha + 30))
-            nvgStrokeWidth(ctx, 2)
-            nvgStroke(ctx)
-
-            -- 狂暴计时文字
-            nvgFontFace(ctx, "sans")
-            nvgFontSize(ctx, 12)
-            nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
-            nvgFillColor(ctx, nvgRGBA(255, 80, 80, 200))
-            local fText = string.format("狂暴 %.1fs", frenzyState.timer)
-            nvgText(ctx, fSX, fSY - fRadius - 4, fText, nil)
+        if arrowRainState.arrows then
+            for _, ar in ipairs(arrowRainState.arrows) do
+                if ar.life > 0 then
+                    local asx, asy = Utils.worldToScreen(ar.x, ar.y)
+                    local arAlpha = math.floor((ar.life / ar.maxLife) * 200)
+                    nvgBeginPath(ctx)
+                    nvgMoveTo(ctx, asx, asy - 12)
+                    nvgLineTo(ctx, asx - 2, asy)
+                    nvgLineTo(ctx, asx + 2, asy)
+                    nvgClosePath(ctx)
+                    nvgFillColor(ctx, nvgRGBA(255, 100, 80, arAlpha))
+                    nvgFill(ctx)
+                end
+            end
         end
+
+        nvgFontFace(ctx, "sans")
+        nvgFontSize(ctx, 12)
+        nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
+        nvgFillColor(ctx, nvgRGBA(255, 120, 80, 200))
+        nvgText(ctx, arSX, arSY - arRadius - 4, string.format("箭雨 %.1fs", arrowRainState.timer), nil)
     end
 
     -- 6) 冲锋随从加速指示（领主脚下蓝色光圈）

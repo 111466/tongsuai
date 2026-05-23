@@ -333,6 +333,9 @@ function FollowerAI.updateFollowerAI(f, dt)
         end
 
     elseif f.state == "attacking" then
+        if SkillSystem.isShieldWallStunned(f) and f.fType == "soldier" then
+            return
+        end
         -- 战斗单位：冲向目标（骑士加速，弓箭手远程）
         -- 更新目标位置
         local targetAlive = false
@@ -375,11 +378,6 @@ function FollowerAI.updateFollowerAI(f, dt)
         f.targetY = ty
 
         local dToTarget = dist(f.x, f.y, tx, ty)
-        local atkSpeedMul = 1.0
-
-        -- === 拒马减速：敌方单位在拒马范围内移速减半 ===
-        local barricadeSlow = SkillSystem.getBarricadeSlowFactor(f.x, f.y, f.factionId)
-        atkSpeedMul = atkSpeedMul * barricadeSlow
 
         if CONFIG.IsRangedUnit[f.fType] then
             -- 弓箭手：保持距离射击
@@ -390,14 +388,14 @@ function FollowerAI.updateFollowerAI(f, dt)
             if dToTarget < unitFleeDistance then
                 -- 被贴近，逃跑
                 local dx, dy = normalize(f.x - tx, f.y - ty)
-                f.x = f.x + dx * CONFIG.FollowerSpeed * 1.1 * atkSpeedMul * globalSpd * dt
-                f.y = f.y + dy * CONFIG.FollowerSpeed * 1.1 * atkSpeedMul * globalSpd * dt
+                f.x = f.x + dx * CONFIG.FollowerSpeed * 1.1 * globalSpd * dt
+                f.y = f.y + dy * CONFIG.FollowerSpeed * 1.1 * globalSpd * dt
                 f.angle = math.atan2(dy, dx)
             elseif dToTarget > unitRange then
                 -- 太远，靠近
                 local dx, dy = normalize(tx - f.x, ty - f.y)
-                f.x = f.x + dx * CONFIG.FollowerSpeed * atkSpeedMul * globalSpd * dt
-                f.y = f.y + dy * CONFIG.FollowerSpeed * atkSpeedMul * globalSpd * dt
+                f.x = f.x + dx * CONFIG.FollowerSpeed * globalSpd * dt
+                f.y = f.y + dy * CONFIG.FollowerSpeed * globalSpd * dt
                 f.angle = math.atan2(dy, dx)
             else
                 -- 在射程内，射击
@@ -422,17 +420,14 @@ function FollowerAI.updateFollowerAI(f, dt)
             if dToTarget > contactDist then
                 local dx, dy = normalize(tx - f.x, ty - f.y)
                 local chargeMul = 1.2
-                f.x = f.x + dx * CONFIG.FollowerSpeed * chargeMul * atkSpeedMul * globalSpd * dt
-                f.y = f.y + dy * CONFIG.FollowerSpeed * chargeMul * atkSpeedMul * globalSpd * dt
+                f.x = f.x + dx * CONFIG.FollowerSpeed * chargeMul * globalSpd * dt
+                f.y = f.y + dy * CONFIG.FollowerSpeed * chargeMul * globalSpd * dt
                 f.angle = math.atan2(dy, dx)
             else
                 -- 已进入碰撞距离，停下来（Combat.processCombat 处理伤害）
                 f.angle = math.atan2(ty - f.y, tx - f.x)
             end
         end
-
-        -- === 拒马碰撞阻挡 ===
-        SkillSystem.applyBarricadeCollision(f, dt)
     end
 
     -- ===== 治愈师：主动治疗受伤友军 =====

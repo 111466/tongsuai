@@ -34,6 +34,9 @@ end
 
 -- 护甲减伤
 local function applyArmor(dmg, defenderUnit)
+    if SkillSystem.isShieldWallActive(defenderUnit.factionId) and defenderUnit.fType == "soldier" then
+        dmg = dmg * 0.5
+    end
     return dmg
 end
 
@@ -64,19 +67,8 @@ function Combat.processCombat(dt)
                                 fb.hp = fb.hp - dmg
                                 fb.hitTimer = 0.2
                                 local baseInterval = CONFIG.UnitStats[fa.fType].atkInterval
-                                local frenzyMul = SkillSystem.getFrenzyAtkSpeedMul(fa.factionId)
-                                fa.attackTimer = baseInterval / frenzyMul
+                                fa.attackTimer = baseInterval
                                 Entities.spawnDamageNumber(fb.x, fb.y, dmg, 255, 80, 80)
-                                Entities.spawnParticle((fa.x + fb.x)/2, (fa.y + fb.y)/2, 255, 200, 50, 3)
-                                local lifesteal = SkillSystem.getLifestealPct(fa.factionId)
-                                if lifesteal > 0 then
-                                    local healAmt = math.floor(dmg * lifesteal)
-                                    if healAmt > 0 then
-                                        local stats = CONFIG.UnitStats[fa.fType]
-                                        fa.hp = math.min(stats.hp, fa.hp + healAmt)
-                                        Entities.spawnDamageNumber(fa.x, fa.y, "+" .. healAmt, 100, 255, 100)
-                                    end
-                                end
                             end
                             -- 反击：被攻击方也可以攻击回来
                             if fb.fType ~= "archer" and fb.state == "attacking" then
@@ -87,18 +79,8 @@ function Combat.processCombat(dt)
                                     fa.hp = fa.hp - dmgBack
                                     fa.hitTimer = 0.2
                                     local baseIntervalB = CONFIG.UnitStats[fb.fType].atkInterval
-                                    local frenzyMulB = SkillSystem.getFrenzyAtkSpeedMul(fb.factionId)
-                                    fb.attackTimer = baseIntervalB / frenzyMulB
+                                    fb.attackTimer = baseIntervalB
                                     Entities.spawnDamageNumber(fa.x, fa.y, dmgBack, 255, 80, 80)
-                                    local lifestealB = SkillSystem.getLifestealPct(fb.factionId)
-                                    if lifestealB > 0 then
-                                        local healB = math.floor(dmgBack * lifestealB)
-                                        if healB > 0 then
-                                            local statsB = CONFIG.UnitStats[fb.fType]
-                                            fb.hp = math.min(statsB.hp, fb.hp + healB)
-                                            Entities.spawnDamageNumber(fb.x, fb.y, "+" .. healB, 100, 255, 100)
-                                        end
-                                    end
                                 end
                             end
                             -- 检查死亡
@@ -168,32 +150,6 @@ function Combat.processCombat(dt)
                             Entities.spawnParticle(b.x, b.y, 255, 150, 50, 3)
                         end
                         break
-                    end
-                end
-            end
-        end
-    end
-
-    -- === 近战单位 vs 拒马（可被攻击摧毁） ===
-    for _, f in ipairs(GS.followers) do
-        if f.alive and f.fType ~= "archer" and f.state == "attacking" then
-            for _, b in ipairs(GS.barricades) do
-                if b.alive and b.ownerFaction ~= f.factionId then
-                    local d = Utils.dist(f.x, f.y, b.x, b.y)
-                    if d < b.radius + getUnitRadius(f.fType) then
-                        f.attackTimer = f.attackTimer - dt
-                        if f.attackTimer <= 0 then
-                            local dmg = CONFIG.UnitStats[f.fType].atk
-                            b.hp = b.hp - dmg
-                            f.attackTimer = CONFIG.UnitStats[f.fType].atkInterval
-                            Entities.spawnDamageNumber(b.x, b.y, dmg, 139, 90, 43)
-                            Entities.spawnParticle(b.x, b.y, 139, 90, 43, 2)
-                            if b.hp <= 0 then
-                                b.alive = false
-                                Entities.spawnParticle(b.x, b.y, 139, 90, 43, 10)
-                            end
-                        end
-                        break  -- 每帧只攻击一个拒马
                     end
                 end
             end
