@@ -616,17 +616,24 @@ function HandleUpdate(eventType, eventData)
     -- 鼠标/触摸瞄准模式：跟踪输入位置
     if GS.skillAiming then
         local aimSX, aimSY
-        if input:GetMouseButtonDown(MOUSEB_LEFT) or input:GetMouseButtonDown(MOUSEB_RIGHT) then
-            local mpos = input:GetMousePosition()
-            aimSX, aimSY = mpos.x, mpos.y
-        elseif numTouches > 0 then
-            for i = 0, numTouches - 1 do
+        local aiming = GS.skillAiming
+        if aiming.fingerId == nil then
+            -- 鼠标模式：直接取鼠标位置
+            if input:GetMouseButtonDown(MOUSEB_LEFT) then
+                local mpos = input:GetMousePosition()
+                aimSX, aimSY = mpos.x, mpos.y
+            end
+        else
+            -- 触摸模式：按 fingerId 找对应的手指（实时查询，不用帧首快照避免竞态）
+            local freshTouches = input.numTouches
+            for i = 0, freshTouches - 1 do
                 local touch = input:GetTouch(i)
-                if touch then
+                if touch and touch.touchID == aiming.fingerId then
                     aimSX, aimSY = touch.position.x, touch.position.y
                     break
                 end
             end
+            -- 不在此处自动确认：手指抬起由 UI onPointerUp（指针捕获）负责触发 confirmAiming
         end
         if aimSX and aimSY then
             SkillSystem.updateAiming(aimSX, aimSY)
@@ -644,15 +651,6 @@ function HandleMouseDown(eventType, eventData)
     local btn = eventData["Button"]:GetInt()
     if btn == MOUSEB_LEFT then
         if GS.gameState == "playing" then
-            if GS.skillAiming then
-                local elapsed = os.clock() - (GS.skillAiming.aimStartTime or 0)
-                if elapsed > 0.15 then
-                    SkillSystem.confirmAiming()
-                    GS.keyAimingSkill = nil
-                    return
-                end
-            end
-
             local mx = input:GetMousePosition().x
             local my = input:GetMousePosition().y
             if Renderer.isMinimapClicked(mx, my, GS.screenW, GS.screenH) then
@@ -673,12 +671,9 @@ function HandleMouseUp(eventType, eventData)
     local btn = eventData["Button"]:GetInt()
     if btn == MOUSEB_LEFT then
         if GS.skillAiming then
-            local elapsed = os.clock() - (GS.skillAiming.aimStartTime or 0)
-            if elapsed > 0.15 then
-                SkillSystem.confirmAiming()
-                GS.keyAimingSkill = nil
-                return
-            end
+            SkillSystem.confirmAiming()
+            GS.keyAimingSkill = nil
+            return
         end
         if GS.keyAimingSkill then
             SkillSystem.confirmAiming()

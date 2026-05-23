@@ -142,7 +142,7 @@ end
 -- 拖拽施法状态管理
 -- ============================================================================
 
-function SkillSystem.startAiming(skillId, screenX, screenY)
+function SkillSystem.startAiming(skillId, screenX, screenY, fingerId)
     if not SkillSystem.canActivate(skillId) then
         return false
     end
@@ -154,6 +154,7 @@ function SkillSystem.startAiming(skillId, screenX, screenY)
         currentX = screenX,
         currentY = screenY,
         aimStartTime = os.clock(),
+        fingerId = fingerId,  -- 触摸手指ID，nil表示鼠标
     }
     return true
 end
@@ -188,27 +189,35 @@ function SkillSystem.confirmAiming()
     local cfg = CONFIG.Skills[skillId]
     GS.skillCooldowns[skillId] = cfg.cd
 
+    -- 计算拖拽向量（当前位置 - 按钮中心起点）
+    local dragX = aiming.currentX - aiming.startX
+    local dragY = aiming.currentY - aiming.startY
+    local dragDist = math.sqrt(dragX * dragX + dragY * dragY)
+    local DEADZONE = 15  -- 小于15px的拖拽视为无方向
+
+    local dirX, dirY  -- 屏幕空间方向（已归一化）
+    if dragDist >= DEADZONE then
+        dirX = dragX / dragDist
+        dirY = dragY / dragDist
+    else
+        -- 死区内：使用lord当前朝向映射到屏幕方向
+        dirX = math.cos(lord.angle)
+        dirY = math.sin(lord.angle)
+    end
+
     if skillId == "dash" then
-        local angle = math.atan2(aiming.currentY - aiming.startY, aiming.currentX - aiming.startX)
-        local dirX = math.cos(angle)
-        local dirY = math.sin(angle)
-        if math.abs(dirX) < 0.001 and math.abs(dirY) < 0.001 then
-            dirX = math.cos(lord.angle)
-            dirY = math.sin(lord.angle)
-        end
         SkillSystem._activateDash(cfg, dirX, dirY)
     elseif skillId == "bounty" then
-        local wx, wy = Utils.screenToWorld(aiming.currentX, aiming.currentY)
-        local tx, ty = clampToLordRange(wx, wy, lord.x, lord.y)
+        -- 屏幕拖拽方向对应世界方向（俯视图屏幕X=世界X，屏幕Y=世界Y）
+        local tx = lord.x + dirX * MAX_RANGE
+        local ty = lord.y + dirY * MAX_RANGE
         SkillSystem._activateBounty(cfg, tx, ty)
     elseif skillId == "arrowRain" then
-        local wx, wy = Utils.screenToWorld(aiming.currentX, aiming.currentY)
-        local tx, ty = clampToLordRange(wx, wy, lord.x, lord.y)
+        local tx = lord.x + dirX * MAX_RANGE
+        local ty = lord.y + dirY * MAX_RANGE
         SkillSystem._activateArrowRain(cfg, tx, ty)
     elseif skillId == "shieldWall" then
-        local wx, wy = Utils.screenToWorld(aiming.currentX, aiming.currentY)
-        local tx, ty = clampToLordRange(wx, wy, lord.x, lord.y)
-        local aimAngle = math.atan2(ty - lord.y, tx - lord.x)
+        local aimAngle = math.atan2(dirY, dirX)
         SkillSystem._activateShieldWall(cfg, aimAngle)
     end
 

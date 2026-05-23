@@ -121,19 +121,21 @@ function M.CreateGameUI()
             justifyContent = "center",
             alignItems = "center",
             cursor = "pointer",
-            onClick = function()
-                if GS.skillAiming then
-                    if GS.skillAiming.skillId == skillId then
-                        SkillSystem.cancelAiming()
-                    else
-                        local mx = input:GetMousePosition().x
-                        local my = input:GetMousePosition().y
-                        SkillSystem.startAiming(skillId, mx, my)
-                    end
-                else
-                    local mx = input:GetMousePosition().x
-                    local my = input:GetMousePosition().y
-                    SkillSystem.startAiming(skillId, mx, my)
+            -- 王者荣耀风格：按下即开始瞄准，松开释放
+            onPointerDown = function(event, widget)
+                -- 计算按钮中心的屏幕坐标（作为摇杆原点）
+                local containerLeft = GS.screenW - 10 - containerW
+                local containerTop  = GS.screenH - 10 - containerH
+                local btnCX = containerLeft + sx
+                local btnCY = containerTop  + sy
+                -- 存储 pointerId 以便多点触控时追踪正确的手指
+                SkillSystem.startAiming(skillId, btnCX, btnCY, event.pointerId)
+            end,
+            onPointerUp = function(event, widget)
+                -- 松开时确认技能（支持多点触控：只响应发起瞄准的那根手指）
+                if GS.skillAiming and GS.skillAiming.fingerId == event.pointerId then
+                    SkillSystem.confirmAiming()
+                    GS.keyAimingSkill = nil
                 end
             end,
             children = {

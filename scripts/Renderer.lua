@@ -2194,53 +2194,89 @@ function M.drawSkillEffects(w, h)
         end
     end
 
-    -- 7) 瞄准模式指示器
+    -- 7) 瞄准模式指示器（王者荣耀摇杆风格）
     local aiming = GS.skillAiming
     if aiming then
         local lord = GS.lords[1]
         if lord and lord.alive then
             local lordSX, lordSY = Utils.worldToScreen(lord.x, lord.y)
-            local targetWX, targetWY = Utils.screenToWorld(aiming.currentX, aiming.currentY)
-            local targetSX, targetSY = aiming.currentX, aiming.currentY
-            local distToTarget = Utils.dist(lord.x, lord.y, targetWX, targetWY)
-            local outOfRange = distToTarget > 440
             local skillId = aiming.skillId
 
-            -- 范围限制圈（超出440px时显示）
-            if outOfRange then
-                local dashLen = 8
-                local circumf = 2 * math.pi * 440
-                local numDashes = math.floor(circumf / (dashLen * 2))
-                nvgBeginPath(ctx)
-                for i = 0, numDashes - 1 do
-                    local a1 = (i / numDashes) * math.pi * 2
-                    local a2 = ((i + 0.5) / numDashes) * math.pi * 2
-                    nvgMoveTo(ctx, lordSX + math.cos(a1) * 440, lordSY + math.sin(a1) * 440)
-                    nvgLineTo(ctx, lordSX + math.cos(a2) * 440, lordSY + math.sin(a2) * 440)
-                end
-                nvgStrokeColor(ctx, nvgRGBA(255, 100, 100, 120))
-                nvgStrokeWidth(ctx, 1.5)
-                nvgStroke(ctx)
+            -- 计算拖拽方向（屏幕空间）
+            local dragX = aiming.currentX - aiming.startX
+            local dragY = aiming.currentY - aiming.startY
+            local dragDist = math.sqrt(dragX * dragX + dragY * dragY)
+            local DEADZONE = 15
+            local dirX, dirY  -- 归一化方向
+            if dragDist >= DEADZONE then
+                dirX = dragX / dragDist
+                dirY = dragY / dragDist
+            else
+                -- 死区内：用lord朝向
+                dirX = math.cos(lord.angle)
+                dirY = math.sin(lord.angle)
             end
 
+            -- 地图上目标位置（按方向 + MAX_RANGE 投影）
+            local MAP_RANGE_PX = 440  -- MAX_RANGE 的屏幕像素约等值（已与世界单位对齐）
+            local targetWX = lord.x + dirX * 440
+            local targetWY = lord.y + dirY * 440
+            local targetSX, targetSY = Utils.worldToScreen(targetWX, targetWY)
+
+            -- ---- 按钮摇杆指示器（在按钮中心绘制） ----
+            local btnX, btnY = aiming.startX, aiming.startY
+            local RING_R = 50  -- 外圈半径
+            local KNOB_R = 18  -- 旋钮半径
+
+            -- 外圈（半透明白色）
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, btnX, btnY, RING_R)
+            nvgStrokeColor(ctx, nvgRGBA(255, 255, 255, 80))
+            nvgStrokeWidth(ctx, 2)
+            nvgStroke(ctx)
+            nvgFillColor(ctx, nvgRGBA(255, 255, 255, 20))
+            nvgFill(ctx)
+
+            -- 旋钮（按拖拽方向偏移，限制在外圈内）
+            local knobOffDist = math.min(dragDist, RING_R)
+            local knobX = btnX + dirX * knobOffDist
+            local knobY = btnY + dirY * knobOffDist
+
+            -- 根据技能着色
+            local skillColors = {
+                dash       = {80, 160, 255},
+                bounty     = {255, 200, 0},
+                arrowRain  = {100, 220, 100},
+                shieldWall = {80, 160, 255},
+            }
+            local sc = skillColors[skillId] or {255, 255, 255}
+
+            nvgBeginPath(ctx)
+            nvgCircle(ctx, knobX, knobY, KNOB_R)
+            nvgFillColor(ctx, nvgRGBA(sc[1], sc[2], sc[3], 180))
+            nvgFill(ctx)
+            nvgStrokeColor(ctx, nvgRGBA(255, 255, 255, 200))
+            nvgStrokeWidth(ctx, 2)
+            nvgStroke(ctx)
+
+            -- 方向箭头（从圆心指向旋钮）
+            if dragDist >= DEADZONE then
+                local arrowTipX = btnX + dirX * (RING_R + 10)
+                local arrowTipY = btnY + dirY * (RING_R + 10)
+                local arrowSize = 10
+                local perpX, perpY = -dirY * 0.4, dirX * 0.4
+                nvgBeginPath(ctx)
+                nvgMoveTo(ctx, arrowTipX, arrowTipY)
+                nvgLineTo(ctx, arrowTipX - dirX * arrowSize + perpX * arrowSize, arrowTipY - dirY * arrowSize + perpY * arrowSize)
+                nvgLineTo(ctx, arrowTipX - dirX * arrowSize - perpX * arrowSize, arrowTipY - dirY * arrowSize - perpY * arrowSize)
+                nvgClosePath(ctx)
+                nvgFillColor(ctx, nvgRGBA(sc[1], sc[2], sc[3], 220))
+                nvgFill(ctx)
+            end
+
+            -- ---- 地图上目标区域指示 ----
             if skillId == "dash" then
-                -- 冲锋瞄准：箭头线 + 击退范围圆
-                nvgBeginPath(ctx)
-                nvgMoveTo(ctx, lordSX, lordSY)
-                nvgLineTo(ctx, targetSX, targetSY)
-                nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, 160))
-                nvgStrokeWidth(ctx, 3)
-                nvgStroke(ctx)
-                local angle = math.atan2(targetSY - lordSY, targetSX - lordSX)
-                local arrowSize = 12
-                nvgBeginPath(ctx)
-                nvgMoveTo(ctx, targetSX, targetSY)
-                nvgLineTo(ctx, targetSX - math.cos(angle - 0.4) * arrowSize, targetSY - math.sin(angle - 0.4) * arrowSize)
-                nvgMoveTo(ctx, targetSX, targetSY)
-                nvgLineTo(ctx, targetSX - math.cos(angle + 0.4) * arrowSize, targetSY - math.sin(angle + 0.4) * arrowSize)
-                nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, 200))
-                nvgStrokeWidth(ctx, 3)
-                nvgStroke(ctx)
+                -- 冲锋瞄准：击退范围圆
                 local knockR = 50
                 nvgBeginPath(ctx)
                 nvgCircle(ctx, targetSX, targetSY, knockR)
@@ -2251,32 +2287,7 @@ function M.drawSkillEffects(w, h)
                 nvgFill(ctx)
 
             elseif skillId == "bounty" then
-                -- 悬赏瞄准：虚线 + 金色圆圈
-                local dashSegLen = 10
-                local totalDist = Utils.dist(lordSX, lordSY, targetSX, targetSY)
-                if totalDist > 1 then
-                    local ndx = (targetSX - lordSX) / totalDist
-                    local ndy = (targetSY - lordSY) / totalDist
-                    nvgBeginPath(ctx)
-                    local drawn = 0
-                    local on = true
-                    while drawn < totalDist do
-                        local segLen = math.min(dashSegLen, totalDist - drawn)
-                        local sx1 = lordSX + ndx * drawn
-                        local sy1 = lordSY + ndy * drawn
-                        local sx2 = lordSX + ndx * (drawn + segLen)
-                        local sy2 = lordSY + ndy * (drawn + segLen)
-                        if on then
-                            nvgMoveTo(ctx, sx1, sy1)
-                            nvgLineTo(ctx, sx2, sy2)
-                        end
-                        drawn = drawn + segLen
-                        on = not on
-                    end
-                    nvgStrokeColor(ctx, nvgRGBA(255, 200, 0, 140))
-                    nvgStrokeWidth(ctx, 2)
-                    nvgStroke(ctx)
-                end
+                -- 悬赏瞄准：金色目标圆圈
                 local bountyR = 60
                 nvgBeginPath(ctx)
                 nvgCircle(ctx, targetSX, targetSY, bountyR)
@@ -2287,32 +2298,7 @@ function M.drawSkillEffects(w, h)
                 nvgFill(ctx)
 
             elseif skillId == "arrowRain" then
-                -- 箭雨瞄准：虚线 + 蓝色多圈
-                local dashSegLen = 10
-                local totalDist = Utils.dist(lordSX, lordSY, targetSX, targetSY)
-                if totalDist > 1 then
-                    local ndx = (targetSX - lordSX) / totalDist
-                    local ndy = (targetSY - lordSY) / totalDist
-                    nvgBeginPath(ctx)
-                    local drawn = 0
-                    local on = true
-                    while drawn < totalDist do
-                        local segLen = math.min(dashSegLen, totalDist - drawn)
-                        local sx1 = lordSX + ndx * drawn
-                        local sy1 = lordSY + ndy * drawn
-                        local sx2 = lordSX + ndx * (drawn + segLen)
-                        local sy2 = lordSY + ndy * (drawn + segLen)
-                        if on then
-                            nvgMoveTo(ctx, sx1, sy1)
-                            nvgLineTo(ctx, sx2, sy2)
-                        end
-                        drawn = drawn + segLen
-                        on = not on
-                    end
-                    nvgStrokeColor(ctx, nvgRGBA(100, 200, 255, 140))
-                    nvgStrokeWidth(ctx, 2)
-                    nvgStroke(ctx)
-                end
+                -- 箭雨瞄准：绿色多圈目标
                 local arCfg = CONFIG.Skills.arrowRain
                 local lord2 = GS.lords[1]
                 local archerCount = 0
@@ -2328,43 +2314,18 @@ function M.drawSkillEffects(w, h)
                     local ringR = arR * pulse * (ring / 3)
                     nvgBeginPath(ctx)
                     nvgCircle(ctx, targetSX, targetSY, ringR)
-                    nvgStrokeColor(ctx, nvgRGBA(100, 200, 255, math.floor(160 / ring)))
+                    nvgStrokeColor(ctx, nvgRGBA(100, 220, 100, math.floor(160 / ring)))
                     nvgStrokeWidth(ctx, 1.5)
                     nvgStroke(ctx)
                 end
                 nvgBeginPath(ctx)
                 nvgCircle(ctx, targetSX, targetSY, arR * pulse)
-                nvgFillColor(ctx, nvgRGBA(100, 200, 255, 20))
+                nvgFillColor(ctx, nvgRGBA(100, 220, 100, 20))
                 nvgFill(ctx)
 
             elseif skillId == "shieldWall" then
-                -- 盾墙瞄准：虚线 + 士兵列阵预览
-                local dashSegLen = 10
-                local totalDist = Utils.dist(lordSX, lordSY, targetSX, targetSY)
-                if totalDist > 1 then
-                    local ndx = (targetSX - lordSX) / totalDist
-                    local ndy = (targetSY - lordSY) / totalDist
-                    nvgBeginPath(ctx)
-                    local drawn = 0
-                    local on = true
-                    while drawn < totalDist do
-                        local segLen = math.min(dashSegLen, totalDist - drawn)
-                        local sx1 = lordSX + ndx * drawn
-                        local sy1 = lordSY + ndy * drawn
-                        local sx2 = lordSX + ndx * (drawn + segLen)
-                        local sy2 = lordSY + ndy * (drawn + segLen)
-                        if on then
-                            nvgMoveTo(ctx, sx1, sy1)
-                            nvgLineTo(ctx, sx2, sy2)
-                        end
-                        drawn = drawn + segLen
-                        on = not on
-                    end
-                    nvgStrokeColor(ctx, nvgRGBA(80, 160, 255, 140))
-                    nvgStrokeWidth(ctx, 2)
-                    nvgStroke(ctx)
-                end
-                local aimAngle = math.atan2(targetWY - lord.y, targetWX - lord.x)
+                -- 盾墙瞄准：士兵列阵预览（按拖拽方向）
+                local aimAngle = math.atan2(dirY, dirX)
                 local perpAngle = aimAngle + math.pi / 2
                 local swCfg = CONFIG.Skills.shieldWall
                 local rowSize = swCfg.rowSize
@@ -2399,7 +2360,7 @@ function M.drawSkillEffects(w, h)
             nvgTextAlign(ctx, NVG_ALIGN_CENTER + NVG_ALIGN_BOTTOM)
             local hintAlpha = 180 + math.floor(math.sin(GS.gameTime * 4) * 75)
             nvgFillColor(ctx, nvgRGBA(255, 255, 255, hintAlpha))
-            nvgText(ctx, w / 2, h - 60, "点击释放 | ESC取消", nil)
+            nvgText(ctx, w / 2, h - 60, "松开释放 | ESC取消", nil)
         end
     end
 end
